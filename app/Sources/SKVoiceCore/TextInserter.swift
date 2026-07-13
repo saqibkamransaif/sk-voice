@@ -12,6 +12,24 @@ public enum InsertResult: Equatable, Sendable {
 /// Pastes text at the cursor of the frontmost app by synthesizing Cmd+V, preserving
 /// whatever was on the clipboard before.
 public struct TextInserter {
+    /// Re-activates `target` (the app the user was dictating into before a review window
+    /// took focus), waits for it to become frontmost, then pastes.
+    public static func insert(
+        _ text: String,
+        into target: NSRunningApplication?,
+        isSecureInput: Bool = IsSecureEventInputEnabled(),
+        restoreDelay: Duration = .milliseconds(300)
+    ) async -> InsertResult {
+        if let target, !target.isTerminated {
+            target.activate()
+            // Wait (up to ~1 s) for focus to actually land back on the target.
+            for _ in 0..<20 where NSWorkspace.shared.frontmostApplication != target {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+        }
+        return await insert(text, isSecureInput: isSecureInput, restoreDelay: restoreDelay)
+    }
+
     /// Injectable for tests; production uses the real secure-input check.
     public static func insert(
         _ text: String,

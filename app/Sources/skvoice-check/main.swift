@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AppKit
 import SKVoiceCore
 
 /// Diagnostic CLI for the SK Voice pipeline, mirroring sknote-audiocheck.
@@ -85,6 +86,11 @@ case "mic":
 case "context":
     let captured = ScreenContext.capture()
     print("app: \(captured.appName.isEmpty ? "<none>" : captured.appName)")
+    print("window: \(captured.windowTitle)")
+    let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    let mode = TargetClassifier.classify(bundleID: bundleID, appName: captured.appName,
+                                         windowTitle: captured.windowTitle)
+    print("classified mode: \(mode.rawValue)")
     print("text (\(captured.text.utf8.count) bytes):")
     print(captured.text)
 

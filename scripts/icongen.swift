@@ -17,14 +17,28 @@ let rect = NSRect(x: 0, y: 0, width: dimension, height: dimension)
 let rounded = NSBezierPath(roundedRect: rect.insetBy(dx: dimension * 0.05,
                                                      dy: dimension * 0.05),
                            xRadius: dimension * 0.2, yRadius: dimension * 0.2)
+// Deep indigo → teal diagonal, premium dark glass feel.
 let gradient = NSGradient(colors: [
-    NSColor(calibratedRed: 0.15, green: 0.55, blue: 0.35, alpha: 1),
-    NSColor(calibratedRed: 0.05, green: 0.25, blue: 0.18, alpha: 1),
+    NSColor(calibratedRed: 0.28, green: 0.26, blue: 0.62, alpha: 1),
+    NSColor(calibratedRed: 0.10, green: 0.11, blue: 0.24, alpha: 1),
+    NSColor(calibratedRed: 0.06, green: 0.35, blue: 0.38, alpha: 1),
 ])!
-gradient.draw(in: rounded, angle: -90)
+gradient.draw(in: rounded, angle: -55)
 
-let config = NSImage.SymbolConfiguration(pointSize: dimension * 0.5, weight: .medium)
-if let mic = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)?
+// Subtle inner highlight along the top edge.
+if let highlight = NSGradient(colors: [
+    NSColor.white.withAlphaComponent(0.22),
+    NSColor.white.withAlphaComponent(0.0),
+]) {
+    let top = NSBezierPath(roundedRect: NSRect(
+        x: dimension * 0.05, y: dimension * 0.55,
+        width: dimension * 0.9, height: dimension * 0.4),
+        xRadius: dimension * 0.2, yRadius: dimension * 0.2)
+    highlight.draw(in: top, angle: -90)
+}
+
+let config = NSImage.SymbolConfiguration(pointSize: dimension * 0.5, weight: .light)
+if let mic = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?
     .withSymbolConfiguration(config) {
     let tinted = NSImage(size: mic.size)
     tinted.lockFocus()

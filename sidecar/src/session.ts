@@ -1,5 +1,5 @@
 import { query, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { RefineRequest } from './protocol.js';
+import type { RefineRequest, ReviseRequest } from './protocol.js';
 
 export interface SessionOptions {
   systemPrompt: string;
@@ -38,9 +38,17 @@ export class WarmSession {
     this.maxTurns = options.maxTurnsPerSession ?? 20;
   }
 
-  /** Serialized: one refine in flight at a time. */
+  /** Serialized: one turn in flight at a time. */
   refine(request: RefineRequest): Promise<string> {
-    const run = () => this.runTurn(request);
+    return this.enqueue(this.buildRefinePrompt(request));
+  }
+
+  revise(request: ReviseRequest): Promise<string> {
+    return this.enqueue(this.buildRevisePrompt(request));
+  }
+
+  private enqueue(prompt: string): Promise<string> {
+    const run = () => this.runTurn(prompt);
     const result = this.chain.then(run, run);
     this.chain = result.then(
       () => undefined,
@@ -49,18 +57,47 @@ export class WarmSession {
     return result;
   }
 
-  private buildPrompt(request: RefineRequest): string {
-    const parts = [
+  private buildRefinePrompt(request: RefineRequest): string {
+    const shared = [
       'New independent request — ignore all previous turns entirely.',
       request.appName ? `Target app: ${request.appName}` : '',
-      request.context ? `Conversation context (from the user's screen):\n${request.context}` : '',
+      request.context ? `On-screen context:\n${request.context}` : '',
       `Dictated intent:\n${request.transcript}`,
-      'Write the message now. Output ONLY the message text.',
     ];
-    return parts.filter(Boolean).join('\n\n');
+    if (request.mode === 'prompt') {
+      shared.push(
+        [
+          'The user is dictating a PROMPT for an AI assistant. Expand their intent into a',
+          'clear, well-specified prompt: state the goal, include relevant context and',
+          'constraints, and describe the expected output. Preserve every requirement they',
+          'mentioned; do not invent new ones. Keep it as concise as clarity allows.',
+          'Output ONLY the prompt text.',
+        ].join(' '),
+      );
+    } else {
+      shared.push(
+        'The user is dictating a MESSAGE to a person. Write the polished message now, ' +
+          'matching the tone of the conversation context. Output ONLY the message text.',
+      );
+    }
+    return shared.filter(Boolean).join('\n\n');
   }
 
-  private async runTurn(request: RefineRequest): Promise<string> {
+  private buildRevisePrompt(request: ReviseRequest): string {
+    const kind = request.mode === 'prompt' ? 'prompt' : 'message';
+    return [
+      'New independent request — ignore all previous turns entirely.',
+      request.appName ? `Target app: ${request.appName}` : '',
+      request.context ? `On-screen context:\n${request.context}` : '',
+      `Current ${kind} draft:\n${request.draft}`,
+      `Revision instruction:\n${request.instruction}`,
+      `Apply the instruction to the draft and output ONLY the revised ${kind} text.`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  private async runTurn(prompt: string): Promise<string> {
     if (!this.q || this.turnCount >= this.maxTurns) {
       await this.recycle();
     }
@@ -72,7 +109,7 @@ export class WarmSession {
         type: 'user',
         session_id: '',
         parent_tool_use_id: null,
-        message: { role: 'user', content: [{ type: 'text', text: this.buildPrompt(request) }] },
+        message: { role: 'user', content: [{ type: 'text', text: prompt }] },
       } as SDKUserMessage);
     });
   }

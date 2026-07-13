@@ -211,9 +211,21 @@ public actor SidecarClient {
 
     // MARK: - Requests
 
-    public func refine(transcript: String, context: String, appName: String) async throws -> String {
-        let request = SidecarRequest.refine(
-            id: UUID().uuidString, transcript: transcript, context: context, appName: appName)
+    public func refine(transcript: String, context: String, appName: String,
+                       mode: RefineMode = .message) async throws -> String {
+        try await roundTrip(.refine(
+            id: UUID().uuidString, transcript: transcript, context: context,
+            appName: appName, mode: mode))
+    }
+
+    public func revise(draft: String, instruction: String, context: String,
+                       appName: String, mode: RefineMode) async throws -> String {
+        try await roundTrip(.revise(
+            id: UUID().uuidString, draft: draft, instruction: instruction,
+            context: context, appName: appName, mode: mode))
+    }
+
+    private func roundTrip(_ request: SidecarRequest) async throws -> String {
         let response = try await send(request)
         switch response {
         case .result(_, let text): return text

@@ -6,16 +6,18 @@ import ApplicationServices
 /// no screenshots, no screen-recording permission. Best-effort: any failure returns
 /// empty context and refine proceeds without it.
 public enum ScreenContext {
-    public static func capture(maxBytes: Int = 6144,
-                               budget: TimeInterval = 0.3) -> (appName: String, text: String) {
-        let appName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
-        guard AXIsProcessTrusted() else { return (appName, "") }
+    public static func capture(maxBytes: Int = 6144, budget: TimeInterval = 0.3)
+        -> (appName: String, windowTitle: String, text: String) {
+        let front = NSWorkspace.shared.frontmostApplication
+        let appName = front?.localizedName ?? ""
+        guard AXIsProcessTrusted() else { return (appName, "", "") }
 
         let systemWide = AXUIElementCreateSystemWide()
         guard let app: AXUIElement = attribute(systemWide, kAXFocusedApplicationAttribute),
               let window: AXUIElement = attribute(app, kAXFocusedWindowAttribute) else {
-            return (appName, "")
+            return (appName, "", "")
         }
+        let windowTitle: String = attribute(window, kAXTitleAttribute) ?? ""
 
         let deadline = Date().addingTimeInterval(budget)
         var pieces: [String] = []
@@ -44,7 +46,7 @@ public enum ScreenContext {
         if text.utf8.count > maxBytes {
             text = String(decoding: Array(text.utf8.prefix(maxBytes)), as: UTF8.self)
         }
-        return (appName, text)
+        return (appName, windowTitle, text)
     }
 
     /// Consecutive duplicate strings (AX trees repeat titles/values) collapse to one.

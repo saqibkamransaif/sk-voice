@@ -72,8 +72,9 @@ struct HistoryRow: View {
                 Text(entry.mode == .refine ? "REFINE" : "DICTATE")
                     .font(.system(size: 9, weight: .bold))
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(entry.mode == .refine ? Color.orange.opacity(0.2)
-                                                      : Color.green.opacity(0.2),
+                    .foregroundStyle(entry.mode == .refine ? Color.indigo : Color.teal)
+                    .background(entry.mode == .refine ? Color.indigo.opacity(0.15)
+                                                      : Color.teal.opacity(0.15),
                                 in: Capsule())
                 Text(entry.appName).font(.caption).foregroundStyle(.secondary)
                 Text(entry.createdAt, style: .relative).font(.caption2)

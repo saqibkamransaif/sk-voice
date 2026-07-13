@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] — 2026-07-13
+
+### Added
+- **Refine review window**: Fn+Ctrl no longer auto-pastes. A floating panel shows the
+  drafted text with: editable draft, tone chips (Shorter / More formal / More casual /
+  More detailed), Regenerate (⌘R), Insert (Enter), Discard (Esc), and voice follow-up —
+  hold Fn while the window is open to dictate an adjustment to the current draft.
+- **Smart target detection**: each refine is classified as a MESSAGE (Slack, Mail,
+  Messages…) or an AI PROMPT (Claude, ChatGPT, Cursor, terminals, AI browser tabs).
+  Prompt mode expands dictated intent into a structured, well-specified prompt.
+  The mode badge in the review window can be clicked to switch and re-draft.
+- Sidecar `revise` request + per-mode prompt framing (19 sidecar tests).
+- Auto-registers as a login item on first launch.
+
+### Changed
+- Premium visual refresh: glass floating bar with teal (dictate) / indigo (refine)
+  accents, refreshed dashboard badges, new indigo–teal waveform app icon.
+- Insert refocuses the app you dictated into before pasting.
+
 ## [1.0.0] — 2026-07-12
 
 ### Added

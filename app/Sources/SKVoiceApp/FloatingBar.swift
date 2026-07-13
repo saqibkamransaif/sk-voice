@@ -69,19 +69,20 @@ struct FloatingBarView: View {
             switch coordinator.barState {
             case .idle:
                 Circle()
-                    .fill(Color.white.opacity(0.35))
-                    .frame(width: 7, height: 7)
+                    .fill(.white.opacity(0.4))
+                    .frame(width: 6, height: 6)
+                    .shadow(color: .white.opacity(0.25), radius: 2)
             case .recording(let mode):
                 WaveformView(level: coordinator.inputLevel,
-                             tint: mode == .refine ? .orange : .green)
+                             tint: mode == .refine ? .indigo : .teal)
             case .transcribing:
                 ProgressView()
                     .controlSize(.small)
-                    .tint(.green)
+                    .tint(.teal)
             case .refining:
                 ProgressView()
                     .controlSize(.small)
-                    .tint(.orange)
+                    .tint(.indigo)
             case .error:
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
@@ -89,19 +90,29 @@ struct FloatingBarView: View {
             }
         }
         .frame(width: 22, height: 88)
-        .background(
-            Capsule()
-                .fill(.black.opacity(barOpacity))
-        )
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule().strokeBorder(strokeTint, lineWidth: 1))
+        .opacity(isIdle ? 0.55 : 1)
         .contentShape(Capsule())
         .onTapGesture(perform: onTap)
         .animation(.easeInOut(duration: 0.15), value: coordinator.barState)
         .padding(2)
     }
 
-    private var barOpacity: Double {
-        if case .idle = coordinator.barState { return 0.25 }
-        return 0.65
+    private var isIdle: Bool {
+        if case .idle = coordinator.barState { return true }
+        return false
+    }
+
+    private var strokeTint: Color {
+        switch coordinator.barState {
+        case .recording(let mode): mode == .refine ? .indigo.opacity(0.6) : .teal.opacity(0.6)
+        case .refining: .indigo.opacity(0.5)
+        case .transcribing: .teal.opacity(0.5)
+        case .error: .red.opacity(0.6)
+        case .idle: .white.opacity(0.15)
+        }
     }
 }
 

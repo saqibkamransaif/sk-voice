@@ -11,12 +11,25 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testRefineEncodesAllFields() throws {
         let data = try SidecarRequest.refine(
-            id: "r1", transcript: "hello", context: "ctx", appName: "Slack").encoded()
+            id: "r1", transcript: "hello", context: "ctx", appName: "Slack",
+            mode: .message).encoded()
         let object = try JSONSerialization.jsonObject(with: data.dropLast()) as? [String: String]
         XCTAssertEqual(object?["type"], "refine")
         XCTAssertEqual(object?["transcript"], "hello")
         XCTAssertEqual(object?["context"], "ctx")
         XCTAssertEqual(object?["appName"], "Slack")
+        XCTAssertEqual(object?["mode"], "message")
+    }
+
+    func testReviseEncodesAllFields() throws {
+        let data = try SidecarRequest.revise(
+            id: "v1", draft: "Hey John", instruction: "shorter", context: "",
+            appName: "Mail", mode: .prompt).encoded()
+        let object = try JSONSerialization.jsonObject(with: data.dropLast()) as? [String: String]
+        XCTAssertEqual(object?["type"], "revise")
+        XCTAssertEqual(object?["draft"], "Hey John")
+        XCTAssertEqual(object?["instruction"], "shorter")
+        XCTAssertEqual(object?["mode"], "prompt")
     }
 
     func testDecodePong() {
@@ -43,7 +56,7 @@ final class SidecarProtocolTests: XCTestCase {
     func testUnicodeSurvivesRoundTrip() throws {
         let text = "Héllo — “smart quotes” and émoji 🎤"
         let data = try SidecarRequest.refine(
-            id: "u1", transcript: text, context: "", appName: "").encoded()
+            id: "u1", transcript: text, context: "", appName: "", mode: .message).encoded()
         let object = try JSONSerialization.jsonObject(with: data.dropLast()) as? [String: String]
         XCTAssertEqual(object?["transcript"], text)
     }

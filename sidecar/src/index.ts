@@ -34,8 +34,8 @@ const server = net.createServer((connection) => {
       connection.write(encodeResponse({ id: request.id, type: 'pong' }));
       return;
     }
-    session
-      .refine(request)
+    const turn = request.type === 'revise' ? session.revise(request) : session.refine(request);
+    turn
       .then((text) => {
         connection.write(encodeResponse({ id: request.id, type: 'result', text }));
       })

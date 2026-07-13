@@ -8,6 +8,7 @@ const request: RefineRequest = {
   transcript: 'tell him im running late',
   context: 'John: are you close?',
   appName: 'Messages',
+  mode: 'message',
 };
 
 /**
@@ -111,6 +112,46 @@ describe('WarmSession', () => {
     expect(a).toContain('REFINED<');
     expect(b).toContain('REFINED<');
     expect(calls[0].length).toBe(2);
+    await session.close();
+  });
+});
+
+describe('WarmSession modes and revise', () => {
+  it('uses prompt-enhancement framing in prompt mode', async () => {
+    const { queryFn, calls } = fakeQuery();
+    const session = new WarmSession({ systemPrompt: 'draft', queryFn: queryFn as any });
+
+    await session.refine({ ...request, id: 'm1', mode: 'prompt', appName: 'Claude' });
+    expect(calls[0][0]).toContain('PROMPT for an AI assistant');
+    expect(calls[0][0]).toContain('Output ONLY the prompt text');
+    await session.close();
+  });
+
+  it('uses message framing in message mode', async () => {
+    const { queryFn, calls } = fakeQuery();
+    const session = new WarmSession({ systemPrompt: 'draft', queryFn: queryFn as any });
+
+    await session.refine({ ...request, id: 'm2', mode: 'message' });
+    expect(calls[0][0]).toContain('MESSAGE to a person');
+    await session.close();
+  });
+
+  it('revise includes draft and instruction', async () => {
+    const { queryFn, calls } = fakeQuery();
+    const session = new WarmSession({ systemPrompt: 'draft', queryFn: queryFn as any });
+
+    const text = await session.revise({
+      id: 'v1',
+      type: 'revise',
+      draft: 'Hey John, running late.',
+      instruction: 'make it shorter',
+      context: '',
+      appName: 'Messages',
+      mode: 'message',
+    });
+    expect(text).toContain('REFINED<');
+    expect(calls[0][0]).toContain('Current message draft:\nHey John, running late.');
+    expect(calls[0][0]).toContain('Revision instruction:\nmake it shorter');
     await session.close();
   });
 });

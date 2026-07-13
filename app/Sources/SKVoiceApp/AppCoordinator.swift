@@ -33,8 +33,13 @@ final class AppCoordinator: ObservableObject {
     private var transcriber: DictationTranscriber?
     private var captureStart = Date()
     private var levelTimer: Timer?
-    private var currentContext: (appName: String, text: String) = ("", "")
+    private var currentContext: (appName: String, windowTitle: String, text: String) = ("", "", "")
     private var contextTask: Task<Void, Never>?
+    private var targetApp: NSRunningApplication?
+
+    /// Active refine review, if any. While non-nil, Fn dictation revises the draft.
+    private(set) var review: ReviewSession?
+    private let reviewWindow = ReviewWindowController()
 
     init() {
         let loaded = AppSettings.load()
@@ -138,12 +143,16 @@ final class AppCoordinator: ObservableObject {
         switch action {
         case .start(let mode):
             beginCapture(mode: mode)
+            review?.listening = true
         case .upgradeToRefine:
+            guard review == nil else { return }
             barState = .recording(mode: .refine)
             captureScreenContext()
         case .finish(let mode):
+            review?.listening = false
             endCapture(mode: mode)
         case .cancel:
+            review?.listening = false
             cancelCapture()
         }
     }
@@ -151,7 +160,8 @@ final class AppCoordinator: ObservableObject {
     private func beginCapture(mode: CaptureMode) {
         captureStart = Date()
         barState = .recording(mode: mode)
-        currentContext = ("", "")
+        currentContext = ("", "", "")
+        targetApp = NSWorkspace.shared.frontmostApplication
 
         let transcriber = DictationTranscriber()
         self.transcriber = transcriber
@@ -196,7 +206,7 @@ final class AppCoordinator: ObservableObject {
         barState = mode == .refine ? .refining : .transcribing
 
         let vocabulary = VocabularyProcessor(rules: settings.vocabulary)
-        let targetApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+        let frontAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
 
         Task {
             let raw = await transcriber.finish()
@@ -206,35 +216,120 @@ final class AppCoordinator: ObservableObject {
             }
             let transcript = vocabulary.apply(raw)
 
+            if self.review != nil {
+                // A review window is open — this dictation is a revision instruction.
+                self.barState = .idle
+                self.reviseReview(instruction: transcript)
+                return
+            }
+
             switch mode {
             case .dictation:
                 await self.deliver(text: transcript, raw: raw, mode: .dictation,
-                                   appName: targetApp, duration: duration)
+                                   appName: frontAppName, duration: duration)
             case .refine:
-                await self.refineAndDeliver(transcript: transcript, raw: raw,
-                                            appName: targetApp, duration: duration)
+                self.openReview(transcript: transcript, appName: frontAppName)
             }
         }
     }
 
-    private func refineAndDeliver(transcript: String, raw: String,
-                                  appName: String, duration: Double) async {
-        do {
-            let refined = try await sidecar.refine(
-                transcript: transcript,
-                context: currentContext.text,
-                appName: currentContext.appName.isEmpty ? appName : currentContext.appName)
-            await deliver(text: refined, raw: raw, mode: .refine,
-                          appName: appName, duration: duration)
-        } catch {
-            // Never leave the user empty-handed: paste the raw transcript instead.
-            logError("refine failed, falling back to raw transcript: \(error)")
-            notify(title: "Refine unavailable",
-                   body: "Pasted your raw dictation instead. (\(error.localizedDescription))")
-            await deliver(text: transcript, raw: raw, mode: .refine,
-                          appName: appName, duration: duration)
-            sidecarHealthy = await sidecar.isHealthy()
+    // MARK: - Review window flow
+
+    private func openReview(transcript: String, appName: String) {
+        barState = .idle
+        let contextAppName = currentContext.appName.isEmpty ? appName
+                                                            : currentContext.appName
+        let mode = TargetClassifier.classify(
+            bundleID: targetApp?.bundleIdentifier,
+            appName: contextAppName,
+            windowTitle: currentContext.windowTitle)
+        let session = ReviewSession(
+            rawTranscript: transcript,
+            context: currentContext.text,
+            appName: contextAppName,
+            mode: mode,
+            targetApp: targetApp)
+        session.draft = transcript
+        review = session
+        reviewWindow.show(session: session, coordinator: self)
+        runReviewTurn(label: "Drafting…") { [sidecar] in
+            try await sidecar.refine(
+                transcript: session.rawTranscript, context: session.context,
+                appName: session.appName, mode: session.mode)
         }
+    }
+
+    func reviseReview(instruction: String) {
+        guard let session = review else { return }
+        let draft = session.draft
+        runReviewTurn(label: "Revising…") { [sidecar] in
+            try await sidecar.revise(
+                draft: draft, instruction: instruction, context: session.context,
+                appName: session.appName, mode: session.mode)
+        }
+    }
+
+    func regenerateReview() {
+        guard let session = review else { return }
+        runReviewTurn(label: "Redrafting…") { [sidecar] in
+            try await sidecar.refine(
+                transcript: session.rawTranscript, context: session.context,
+                appName: session.appName, mode: session.mode)
+        }
+    }
+
+    func switchReviewMode() {
+        guard let session = review else { return }
+        session.mode = session.mode == .prompt ? .message : .prompt
+        regenerateReview()
+    }
+
+    private func runReviewTurn(label: String,
+                               _ turn: @escaping @Sendable () async throws -> String) {
+        guard let session = review else { return }
+        session.busy = true
+        session.busyLabel = label
+        session.errorText = nil
+        Task {
+            do {
+                let text = try await turn()
+                guard self.review === session else { return }
+                session.draft = text
+                session.busy = false
+            } catch {
+                guard self.review === session else { return }
+                session.busy = false
+                session.errorText =
+                    "Claude unavailable — you can edit and insert the text as-is."
+                self.logError("review turn failed: \(error)")
+                self.sidecarHealthy = await self.sidecar.isHealthy()
+            }
+        }
+    }
+
+    func insertReview() {
+        guard let session = review, !session.busy else { return }
+        review = nil
+        reviewWindow.close()
+        let duration = Date().timeIntervalSince(captureStart)
+        Task {
+            let result = await TextInserter.insert(session.draft, into: session.targetApp)
+            if result == .copiedOnly {
+                self.notify(title: "Copied to clipboard",
+                            body: "A secure field was focused, so SK Voice didn't type into it.")
+            }
+            let entry = HistoryEntry(mode: .refine, rawTranscript: session.rawTranscript,
+                                     finalText: session.draft, appName: session.appName,
+                                     durationSeconds: duration)
+            try? self.history?.save(entry)
+            self.historyRevision += 1
+        }
+    }
+
+    func discardReview() {
+        review = nil
+        reviewWindow.close()
+        barState = .idle
     }
 
     private func deliver(text: String, raw: String, mode: CaptureMode,

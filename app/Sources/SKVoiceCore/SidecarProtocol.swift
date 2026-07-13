@@ -3,12 +3,16 @@ import Foundation
 /// NDJSON messages exchanged with the Node sidecar (see sidecar/src/protocol.ts).
 public enum SidecarRequest: Equatable, Sendable {
     case ping(id: String)
-    case refine(id: String, transcript: String, context: String, appName: String)
+    case refine(id: String, transcript: String, context: String, appName: String,
+                mode: RefineMode)
+    case revise(id: String, draft: String, instruction: String, context: String,
+                appName: String, mode: RefineMode)
 
     public var id: String {
         switch self {
         case .ping(let id): id
-        case .refine(let id, _, _, _): id
+        case .refine(let id, _, _, _, _): id
+        case .revise(let id, _, _, _, _, _): id
         }
     }
 
@@ -18,9 +22,13 @@ public enum SidecarRequest: Equatable, Sendable {
         switch self {
         case .ping(let id):
             object = ["id": id, "type": "ping"]
-        case .refine(let id, let transcript, let context, let appName):
+        case .refine(let id, let transcript, let context, let appName, let mode):
             object = ["id": id, "type": "refine", "transcript": transcript,
-                      "context": context, "appName": appName]
+                      "context": context, "appName": appName, "mode": mode.rawValue]
+        case .revise(let id, let draft, let instruction, let context, let appName, let mode):
+            object = ["id": id, "type": "revise", "draft": draft,
+                      "instruction": instruction, "context": context,
+                      "appName": appName, "mode": mode.rawValue]
         }
         var data = try JSONSerialization.data(withJSONObject: object)
         data.append(0x0A)
