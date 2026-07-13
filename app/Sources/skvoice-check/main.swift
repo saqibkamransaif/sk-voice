@@ -83,12 +83,36 @@ case "mic":
     }
 
 case "context":
-    // Wired in Task 9 (ScreenContext).
-    print("context: not wired yet")
+    let captured = ScreenContext.capture()
+    print("app: \(captured.appName.isEmpty ? "<none>" : captured.appName)")
+    print("text (\(captured.text.utf8.count) bytes):")
+    print(captured.text)
 
 case "sidecar":
-    // Wired in Task 8 (SidecarClient).
-    print("sidecar: not wired yet")
+    guard args.count >= 3 else { fail("usage: skvoice-check sidecar <text>") }
+    let transcript = args[2...].joined(separator: " ")
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    // Default sidecar dir: repo layout relative to the app package.
+    let sidecarDir = ProcessInfo.processInfo.environment["SKVOICE_SIDECAR_DIR"]
+        ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .deletingLastPathComponent().appendingPathComponent("sidecar").path
+    let client = SidecarClient(
+        socketPath: "\(home)/.skvoice/sidecar.sock",
+        nodePath: nil,
+        sidecarDir: sidecarDir,
+        requestTimeout: .seconds(30))
+    await client.start()
+    do {
+        let start = Date()
+        let text = try await client.refine(
+            transcript: transcript, context: "", appName: "skvoice-check")
+        let elapsed = Date().timeIntervalSince(start)
+        print("refined (\(String(format: "%.2f", elapsed)) s): \(text)")
+    } catch {
+        await client.stop()
+        fail("sidecar error: \(error.localizedDescription)")
+    }
+    await client.stop()
 
 default:
     fail("unknown subcommand \(args[1])")
