@@ -58,6 +58,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound]) { _, _ in }
 
+        // Register as a login item once, automatically; the Settings toggle still
+        // lets the user turn it off without this fighting their choice on relaunch.
+        let autoEnabledKey = "didAutoEnableLoginItem"
+        if !UserDefaults.standard.bool(forKey: autoEnabledKey) {
+            LoginItem.setEnabled(true)
+            UserDefaults.standard.set(true, forKey: autoEnabledKey)
+        }
+
         if coordinator.permissionsComplete {
             coordinator.startServices()
         } else {
