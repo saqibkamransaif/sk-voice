@@ -4,8 +4,12 @@ Personal macOS voice dictation app — a self-hosted replacement for Willow Voic
 subscription cost.
 
 - **Hold Fn** → speak → release → your words are typed into whatever app you're using.
-- **Hold Fn+Ctrl** → speak your intent → Claude drafts the polished message and types that
-  instead, matching the tone of the conversation on screen.
+- **Hold Fn+Ctrl** → speak your intent → a floating review panel opens with Claude's draft:
+  edit it, apply tone chips (shorter/formal/casual/detailed), speak a follow-up adjustment
+  by holding Fn, then press Enter to insert into the app you came from.
+- **Smart target detection**: dictating into Slack/Mail/Messages drafts a polished message;
+  dictating into Claude Code, claude.ai, ChatGPT, or Cursor expands your intent into a
+  structured prompt instead. The panel badge shows the detected mode and can be flipped.
 
 Both feel instant: on-device Apple SpeechTranscriber ASR (a 2-second utterance transcribes
 in ~0.16 s) and a pre-warmed Claude session (refines in ~1.5–2.5 s).
@@ -26,8 +30,9 @@ SK Voice.app (Swift 6, menu bar)          claude-sidecar (Node, bundled in Resou
 ├── VocabularyProcessor   custom replacements  (NDJSON: ping / refine)
 ├── TextInserter     AX Cmd+V + clipboard restore
 ├── ScreenContext    AX tree of frontmost window (no screenshots)
+├── TargetClassifier message vs AI-prompt mode (bundle id + window title)
 ├── HistoryStore     SQLite
-└── UI: floating edge bar · dashboard (history + settings) · onboarding
+└── UI: floating edge bar · refine review panel · dashboard · onboarding
 ```
 
 ## Build & install
@@ -46,8 +51,8 @@ plus setting **"Press 🌐 key to" → "Do Nothing"** in Keyboard settings.
 ## Development
 
 ```bash
-cd app && swift test                # 42 unit/integration tests
-cd sidecar && npx vitest run        # 13 protocol/session tests
+cd app && swift test                # 50 unit/integration tests
+cd sidecar && npx vitest run        # 19 protocol/session tests
 cd app && swift run skvoice-check wav|mic|context|sidecar   # pipeline diagnostics
 ```
 
