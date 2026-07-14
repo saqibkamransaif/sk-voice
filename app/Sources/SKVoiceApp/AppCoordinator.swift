@@ -85,6 +85,7 @@ final class AppCoordinator: ObservableObject {
 
         let prompt = settings.refineSystemPrompt
         let model = settings.modelOverride
+        appliedSidecarConfig = (prompt, model)
         Task {
             await sidecar.configure { (systemPrompt: prompt, model: model) }
             await sidecar.start()
@@ -112,12 +113,20 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// Sidecar config last applied — restart only when it actually changes, not on every
+    /// settings mutation (vocab/snippet/style edits must not drop the warm session).
+    private var appliedSidecarConfig: (prompt: String, model: String?)?
+
     func applySettingsChange() {
         try? settings.save()
         monitor?.updateThreshold(settings.holdThreshold)
         monitor?.isPaused = settings.hotkeysPaused
+
         let prompt = settings.refineSystemPrompt
         let model = settings.modelOverride
+        guard appliedSidecarConfig?.prompt != prompt
+                || appliedSidecarConfig?.model != model else { return }
+        appliedSidecarConfig = (prompt, model)
         Task {
             await sidecar.configure { (systemPrompt: prompt, model: model) }
             await sidecar.restart()

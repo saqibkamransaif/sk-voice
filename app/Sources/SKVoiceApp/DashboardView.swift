@@ -156,14 +156,10 @@ struct SettingsTab: View {
                     TextField("heard text", text: $newFind)
                     Image(systemName: "arrow.right").foregroundStyle(.secondary)
                     TextField("replace with", text: $newReplace)
-                    Button("Add") {
-                        guard !newFind.isEmpty, !newReplace.isEmpty else { return }
-                        coordinator.settings.vocabulary.append(
-                            VocabRule(find: newFind, replace: newReplace))
-                        newFind = ""
-                        newReplace = ""
-                        coordinator.applySettingsChange()
-                    }
+                    Button("Add", action: addVocabRule)
+                        .buttonStyle(.bordered)
+                        .disabled(newFind.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || newReplace.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
 
@@ -184,22 +180,19 @@ struct SettingsTab: View {
                         .buttonStyle(.borderless)
                     }
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    TextField("spoken trigger (e.g. insert signature)", text: $newTrigger)
-                    TextField("template text (multi-line supported)",
-                              text: $newTemplate, axis: .vertical)
-                        .lineLimit(1...4)
-                    Button("Add snippet") {
-                        guard !newTrigger.isEmpty, !newTemplate.isEmpty else { return }
-                        coordinator.settings.snippets.append(
-                            SnippetRule(trigger: newTrigger, template: newTemplate))
-                        newTrigger = ""
-                        newTemplate = ""
-                        coordinator.applySettingsChange()
-                    }
+                TextField("Spoken trigger (e.g. insert signature)", text: $newTrigger)
+                    .onSubmit(addSnippet)
+                TextField("Template text (multi-line supported)",
+                          text: $newTemplate, axis: .vertical)
+                    .lineLimit(2...5)
+                HStack {
+                    Text("Also built in: “new line”, “new paragraph”, “scratch that”.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Add Snippet", action: addSnippet)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(trimmedTrigger.isEmpty || trimmedTemplate.isEmpty)
                 }
-                Text("Also built in: say “new line”, “new paragraph”, or “scratch that” while dictating.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Your writing style (learned automatically)") {
@@ -254,7 +247,33 @@ struct SettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .onSubmit { coordinator.applySettingsChange() }
+    }
+
+    private var trimmedTrigger: String {
+        newTrigger.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedTemplate: String {
+        newTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func addSnippet() {
+        guard !trimmedTrigger.isEmpty, !trimmedTemplate.isEmpty else { return }
+        coordinator.settings.snippets.append(
+            SnippetRule(trigger: trimmedTrigger, template: trimmedTemplate))
+        newTrigger = ""
+        newTemplate = ""
+        coordinator.applySettingsChange()
+    }
+
+    private func addVocabRule() {
+        let find = newFind.trimmingCharacters(in: .whitespaces)
+        let replace = newReplace.trimmingCharacters(in: .whitespaces)
+        guard !find.isEmpty, !replace.isEmpty else { return }
+        coordinator.settings.vocabulary.append(VocabRule(find: find, replace: replace))
+        newFind = ""
+        newReplace = ""
+        coordinator.applySettingsChange()
     }
 
     /// Two-way binding into settings that persists + applies on change.
