@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0] — 2026-07-13
+
+### Added
+- **Audio ducking**: system output volume drops to 10% while you hold Fn and is restored
+  to the exact prior level on release — no more competing audio while dictating.
+  Automatically skipped when a call app (Zoom, Teams, FaceTime, Slack, Discord, browsers
+  running web meetings…) is actively capturing the microphone, so dictating mid-call never
+  silences the other participants. Toggle in Settings → General.
+- `skvoice-check duck` diagnostic (shows volume, call detection, duck/restore cycle).
+
+### Changed
+- Settings decoding is now tolerant: new fields fall back to defaults instead of
+  resetting the whole settings file (vocabulary and custom prompts survive upgrades).
+
 ## [1.1.0] — 2026-07-13
 
 ### Added

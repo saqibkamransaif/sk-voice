@@ -157,11 +157,16 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    private let ducker = AudioDucker()
+
     private func beginCapture(mode: CaptureMode) {
         captureStart = Date()
         barState = .recording(mode: mode)
         currentContext = ("", "", "")
         targetApp = NSWorkspace.shared.frontmostApplication
+        if settings.duckWhileDictating {
+            Task.detached { [ducker] in ducker.duck() }
+        }
 
         let transcriber = DictationTranscriber()
         self.transcriber = transcriber
@@ -196,6 +201,7 @@ final class AppCoordinator: ObservableObject {
 
     private func endCapture(mode: CaptureMode) {
         recorder.endCapture()
+        Task.detached { [ducker] in ducker.restore() }
         stopLevelTimer()
         guard let transcriber else {
             barState = .idle
@@ -348,6 +354,7 @@ final class AppCoordinator: ObservableObject {
 
     private func cancelCapture() {
         recorder.endCapture()
+        Task.detached { [ducker] in ducker.restore() }
         stopLevelTimer()
         contextTask?.cancel()
         if let transcriber {

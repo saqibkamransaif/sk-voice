@@ -50,6 +50,26 @@ public struct AppSettings: Codable, Sendable, Equatable {
     public var modelOverride: String?
     public var vocabulary: [VocabRule]
     public var hotkeysPaused: Bool
+    /// Duck system output volume while recording (skipped during active calls).
+    public var duckWhileDictating: Bool
+
+    /// Tolerant decoding: new fields fall back to defaults instead of failing the whole
+    /// settings file (which would silently reset the user's vocabulary and prompt).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppSettings()
+        holdThreshold = try container.decodeIfPresent(
+            Double.self, forKey: .holdThreshold) ?? defaults.holdThreshold
+        refineSystemPrompt = try container.decodeIfPresent(
+            String.self, forKey: .refineSystemPrompt) ?? defaults.refineSystemPrompt
+        modelOverride = try container.decodeIfPresent(String.self, forKey: .modelOverride)
+        vocabulary = try container.decodeIfPresent(
+            [VocabRule].self, forKey: .vocabulary) ?? defaults.vocabulary
+        hotkeysPaused = try container.decodeIfPresent(
+            Bool.self, forKey: .hotkeysPaused) ?? defaults.hotkeysPaused
+        duckWhileDictating = try container.decodeIfPresent(
+            Bool.self, forKey: .duckWhileDictating) ?? defaults.duckWhileDictating
+    }
 
     public static let defaultRefinePrompt = """
     You draft polished messages from dictated intent. The user dictates roughly what they \
@@ -64,12 +84,14 @@ public struct AppSettings: Codable, Sendable, Equatable {
                 refineSystemPrompt: String = AppSettings.defaultRefinePrompt,
                 modelOverride: String? = nil,
                 vocabulary: [VocabRule] = [],
-                hotkeysPaused: Bool = false) {
+                hotkeysPaused: Bool = false,
+                duckWhileDictating: Bool = true) {
         self.holdThreshold = holdThreshold
         self.refineSystemPrompt = refineSystemPrompt
         self.modelOverride = modelOverride
         self.vocabulary = vocabulary
         self.hotkeysPaused = hotkeysPaused
+        self.duckWhileDictating = duckWhileDictating
     }
 
     // MARK: - Persistence

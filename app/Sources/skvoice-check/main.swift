@@ -83,6 +83,18 @@ case "mic":
         fail("\(error.localizedDescription)")
     }
 
+case "duck":
+    let before = SystemVolume.get()
+    print("volume before: \(before.map { String(format: "%.2f", $0) } ?? "no software control")")
+    print("call active: \(CallDetection.callAppIsUsingMic())")
+    print("mic users: \(CallDetection.bundleIdsUsingMic())")
+    let ducker = AudioDucker()
+    ducker.duck()
+    print("volume ducked: \(SystemVolume.get().map { String(format: "%.2f", $0) } ?? "?")")
+    try? await Task.sleep(for: .milliseconds(600))
+    ducker.restore()
+    print("volume restored: \(SystemVolume.get().map { String(format: "%.2f", $0) } ?? "?")")
+
 case "context":
     let captured = ScreenContext.capture()
     print("app: \(captured.appName.isEmpty ? "<none>" : captured.appName)")

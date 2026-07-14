@@ -192,6 +192,9 @@ struct SettingsTab: View {
             }
 
             Section("General") {
+                Toggle("Duck other audio while dictating", isOn: binding(\.duckWhileDictating))
+                Text("Lowers system volume to 10% while you hold Fn and restores it after. Skipped automatically during active calls.")
+                    .font(.caption).foregroundStyle(.secondary)
                 LaunchAtLoginToggle()
             }
         }
