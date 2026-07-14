@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVFoundation
 import SKVoiceCore
 
 struct DashboardView: View {
@@ -44,6 +45,7 @@ struct HistoryTab: View {
                 List(entries) { entry in
                     HistoryRow(entry: entry) {
                         try? coordinator.history?.delete(id: entry.id)
+                        AudioStore.delete(for: entry.id)
                         reload()
                     }
                 }
@@ -61,6 +63,19 @@ struct HistoryTab: View {
     }
 }
 
+/// Shared playback so starting one recording stops the previous.
+@MainActor
+final class AudioPlayback {
+    static let shared = AudioPlayback()
+    private var player: AVAudioPlayer?
+
+    func play(entryID: String) {
+        player?.stop()
+        player = try? AVAudioPlayer(contentsOf: AudioStore.url(for: entryID))
+        player?.play()
+    }
+}
+
 struct HistoryRow: View {
     let entry: HistoryEntry
     let onDelete: () -> Void
@@ -69,6 +84,15 @@ struct HistoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
+                if AudioStore.hasAudio(for: entry.id) {
+                    Button {
+                        AudioPlayback.shared.play(entryID: entry.id)
+                    } label: {
+                        Image(systemName: "play.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Play what you actually said")
+                }
                 Text(entry.mode == .refine ? "REFINE" : "DICTATE")
                     .font(.system(size: 9, weight: .bold))
                     .padding(.horizontal, 5).padding(.vertical, 2)
@@ -240,6 +264,9 @@ struct SettingsTab: View {
             }
 
             Section("General") {
+                Toggle("Keep audio recordings", isOn: binding(\.keepAudioRecordings))
+                Text("Each capture's audio is saved locally for playback in History (auto-deleted after 30 days).")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Duck other audio while dictating", isOn: binding(\.duckWhileDictating))
                 Text("Lowers system volume to 10% while you hold Fn and restores it after. Skipped automatically during active calls.")
                     .font(.caption).foregroundStyle(.secondary)

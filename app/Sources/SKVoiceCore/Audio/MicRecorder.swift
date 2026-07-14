@@ -13,6 +13,9 @@ public final class MicRecorder: @unchecked Sendable {
     private let resampler = AudioResampler()
     private let onChunk = Mutex<(@Sendable ([Float]) -> Void)?>(nil)
     private let lastLevel = Mutex<Float>(0)
+    /// Rolling last ~0.6 s of audio, prepended at beginCapture so words spoken a beat
+    /// before the hotkey landed aren't lost.
+    private let preRoll = Mutex<PreRollBuffer>(PreRollBuffer())
     private var prewarmed = false
 
     public init() {}
@@ -37,9 +40,13 @@ public final class MicRecorder: @unchecked Sendable {
             throw MicRecorderError.noInput("no microphone input (format \(format))")
         }
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [self] buffer, _ in
-            guard let handler = onChunk.withLock({ $0 }) else { return }
             let samples = resampler.resample(buffer)
             guard !samples.isEmpty else { return }
+            guard let handler = onChunk.withLock({ $0 }) else {
+                // Not capturing — keep the rolling pre-roll warm.
+                preRoll.withLock { $0.append(samples) }
+                return
+            }
             let rms = (samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count))
                 .squareRoot()
             lastLevel.withLock { $0 = rms }
@@ -59,6 +66,10 @@ public final class MicRecorder: @unchecked Sendable {
     }
 
     public func beginCapture(onChunk handler: @escaping @Sendable ([Float]) -> Void) {
+        let buffered = preRoll.withLock { $0.drain() }
+        if !buffered.isEmpty {
+            handler(buffered)
+        }
         onChunk.withLock { $0 = handler }
     }
 

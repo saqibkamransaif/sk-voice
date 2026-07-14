@@ -63,6 +63,8 @@ public struct AppSettings: Codable, Sendable, Equatable {
     public var autoLearnStyle: Bool
     /// Count of accepted refines, drives the every-N learning schedule.
     public var refineInsertCount: Int
+    /// Save each capture's audio locally (playback in History; 30-day retention).
+    public var keepAudioRecordings: Bool
 
     /// Tolerant decoding: new fields fall back to defaults instead of failing the whole
     /// settings file (which would silently reset the user's vocabulary and prompt).
@@ -88,6 +90,8 @@ public struct AppSettings: Codable, Sendable, Equatable {
             Bool.self, forKey: .autoLearnStyle) ?? defaults.autoLearnStyle
         refineInsertCount = try container.decodeIfPresent(
             Int.self, forKey: .refineInsertCount) ?? defaults.refineInsertCount
+        keepAudioRecordings = try container.decodeIfPresent(
+            Bool.self, forKey: .keepAudioRecordings) ?? defaults.keepAudioRecordings
     }
 
     public static let defaultRefinePrompt = """
@@ -108,7 +112,8 @@ public struct AppSettings: Codable, Sendable, Equatable {
                 snippets: [SnippetRule] = [],
                 styleProfile: String = "",
                 autoLearnStyle: Bool = true,
-                refineInsertCount: Int = 0) {
+                refineInsertCount: Int = 0,
+                keepAudioRecordings: Bool = true) {
         self.holdThreshold = holdThreshold
         self.refineSystemPrompt = refineSystemPrompt
         self.modelOverride = modelOverride
@@ -119,6 +124,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         self.styleProfile = styleProfile
         self.autoLearnStyle = autoLearnStyle
         self.refineInsertCount = refineInsertCount
+        self.keepAudioRecordings = keepAudioRecordings
     }
 
     // MARK: - Persistence

@@ -5,6 +5,7 @@ import UserNotifications
 import AVFoundation
 import IOKit.hid
 import ApplicationServices
+import Synchronization
 import SKVoiceCore
 
 /// Floating bar / menu bar visual state.
@@ -82,6 +83,9 @@ final class AppCoordinator: ObservableObject {
         Task {
             try? await DictationTranscriber.ensureModel()
         }
+        Task.detached {
+            AudioStore.cleanup(olderThanDays: 30)
+        }
 
         let prompt = settings.refineSystemPrompt
         let model = settings.modelOverride
@@ -151,6 +155,8 @@ final class AppCoordinator: ObservableObject {
     /// Selected text grabbed at Fn+Shift-down (transform mode).
     private var grabbedSelection = ""
     private var selectionTask: Task<Void, Never>?
+    /// Samples accumulated during the current capture (for audio saving).
+    private let capturedSamples = SampleAccumulator()
 
     private func handle(action: HotkeyAction) {
         switch action {
@@ -188,7 +194,10 @@ final class AppCoordinator: ObservableObject {
         Task {
             try? await transcriber.start()
         }
+        capturedSamples.reset()
+        let sampleSink = capturedSamples
         recorder.beginCapture { samples in
+            sampleSink.append(samples)
             Task { await transcriber.feed(samples) }
         }
 
@@ -404,6 +413,7 @@ final class AppCoordinator: ObservableObject {
                                      finalText: session.draft, appName: session.appName,
                                      durationSeconds: duration)
             try? self.history?.save(entry)
+            self.saveAudioIfEnabled(for: entry.id)
             self.historyRevision += 1
             self.recordAcceptedRefine(isTransform: session.isTransform)
         }
@@ -452,8 +462,19 @@ final class AppCoordinator: ObservableObject {
         let entry = HistoryEntry(mode: mode, rawTranscript: raw, finalText: text,
                                  appName: appName, durationSeconds: duration)
         try? history?.save(entry)
+        saveAudioIfEnabled(for: entry.id)
         historyRevision += 1
         barState = .idle
+    }
+
+    /// Persist the capture's audio for playback in History (background; local only).
+    private func saveAudioIfEnabled(for entryID: String) {
+        guard settings.keepAudioRecordings else { return }
+        let samples = capturedSamples.snapshot()
+        guard !samples.isEmpty else { return }
+        Task.detached {
+            AudioStore.save(samples: samples, for: entryID)
+        }
     }
 
     private func cancelCapture() {
@@ -503,6 +524,27 @@ final class AppCoordinator: ObservableObject {
             try? Data(line.utf8).write(to: url)
         }
         FileHandle.standardError.write(Data("SKVoice: \(message)\n".utf8))
+    }
+}
+
+/// Thread-safe accumulator for the current capture's audio samples.
+final class SampleAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var samples: [Float] = []
+
+    func reset() {
+        lock.lock(); defer { lock.unlock() }
+        samples = []
+    }
+
+    func append(_ chunk: [Float]) {
+        lock.lock(); defer { lock.unlock() }
+        samples.append(contentsOf: chunk)
+    }
+
+    func snapshot() -> [Float] {
+        lock.lock(); defer { lock.unlock() }
+        return samples
     }
 }
 

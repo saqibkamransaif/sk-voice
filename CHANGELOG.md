@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0] — 2026-07-14
+
+### Added
+- **Audio recordings in History**: every capture's audio is saved locally
+  (16 kHz WAV, ~32 KB/s) with a play button in History — hear exactly what you said when
+  a transcript looks off. Toggle in Settings → General; auto-deleted after 30 days;
+  deleted with the entry.
+
+### Fixed (accuracy)
+- **Clipped first words**: audio chunks arriving while the speech analyzer was still
+  starting (~100–300 ms after Fn-down) were silently dropped. They are now buffered and
+  flushed — nothing is lost. (Regression test feeds half the fixture before start.)
+- **Pre-roll**: a rolling 0.6 s mic buffer is prepended to every capture, recovering
+  syllables spoken a beat before the hotkey landed.
+
 ## [1.3.0] — 2026-07-13
 
 ### Added

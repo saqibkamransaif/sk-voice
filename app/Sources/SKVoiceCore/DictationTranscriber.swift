@@ -20,6 +20,10 @@ public actor DictationTranscriber {
     private var consumeTask: Task<Void, Never>?
     private var feedConverter: AVAudioConverter?
     private var finals: [String] = []
+    /// Chunks that arrive before the analyzer is ready. The analyzer takes ~100-300 ms to
+    /// start; dropping early chunks clipped the first word of dictations (accuracy bug).
+    private var pendingChunks: [[Float]] = []
+    private var ready = false
 
     public init(locale: Locale = Locale(identifier: "en-US")) {
         self.locale = locale
@@ -42,6 +46,7 @@ public actor DictationTranscriber {
     public func start() async throws {
         finals = []
         feedConverter = nil
+        ready = false
 
         let transcriber = SpeechTranscriber(
             locale: locale,
@@ -58,6 +63,13 @@ public actor DictationTranscriber {
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         inputContinuation = continuation
         try await analyzer.start(inputSequence: stream)
+
+        ready = true
+        let pending = pendingChunks
+        pendingChunks = []
+        for chunk in pending {
+            deliver(chunk)
+        }
 
         consumeTask = Task { [weak self] in
             do {
@@ -79,8 +91,17 @@ public actor DictationTranscriber {
         finals.append(text)
     }
 
-    /// Feed a 16 kHz mono chunk.
+    /// Feed a 16 kHz mono chunk. Chunks fed before the analyzer is ready are buffered
+    /// and flushed on start — nothing is dropped.
     public func feed(_ samples: [Float]) {
+        guard ready else {
+            pendingChunks.append(samples)
+            return
+        }
+        deliver(samples)
+    }
+
+    private func deliver(_ samples: [Float]) {
         guard let format = analyzerFormat,
               let mono = AudioResampler.buffer(from: samples) else { return }
         let buffer: AVAudioPCMBuffer
@@ -117,6 +138,8 @@ public actor DictationTranscriber {
         analyzer = nil
         transcriber = nil
         feedConverter = nil
+        ready = false
+        pendingChunks = []
         return finals.joined(separator: " ")
     }
 
@@ -130,6 +153,8 @@ public actor DictationTranscriber {
         transcriber = nil
         feedConverter = nil
         finals = []
+        ready = false
+        pendingChunks = []
     }
 }
 
