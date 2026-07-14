@@ -3,7 +3,10 @@ import Foundation
 /// Which hotkey flow produced a capture.
 public enum CaptureMode: String, Codable, Sendable, Equatable {
     case dictation
+    /// Fn+Ctrl — draft a message/prompt from dictated intent.
     case refine
+    /// Fn+Shift — apply a spoken instruction to the selected text.
+    case transform
 }
 
 /// One completed capture, persisted to history.
@@ -52,6 +55,14 @@ public struct AppSettings: Codable, Sendable, Equatable {
     public var hotkeysPaused: Bool
     /// Duck system output volume while recording (skipped during active calls).
     public var duckWhileDictating: Bool
+    /// Voice snippets: spoken trigger → template expansion.
+    public var snippets: [SnippetRule]
+    /// Learned writing-style profile (auto-updated; user-editable).
+    public var styleProfile: String
+    /// Keep learning the style profile from accepted refines.
+    public var autoLearnStyle: Bool
+    /// Count of accepted refines, drives the every-N learning schedule.
+    public var refineInsertCount: Int
 
     /// Tolerant decoding: new fields fall back to defaults instead of failing the whole
     /// settings file (which would silently reset the user's vocabulary and prompt).
@@ -69,6 +80,14 @@ public struct AppSettings: Codable, Sendable, Equatable {
             Bool.self, forKey: .hotkeysPaused) ?? defaults.hotkeysPaused
         duckWhileDictating = try container.decodeIfPresent(
             Bool.self, forKey: .duckWhileDictating) ?? defaults.duckWhileDictating
+        snippets = try container.decodeIfPresent(
+            [SnippetRule].self, forKey: .snippets) ?? defaults.snippets
+        styleProfile = try container.decodeIfPresent(
+            String.self, forKey: .styleProfile) ?? defaults.styleProfile
+        autoLearnStyle = try container.decodeIfPresent(
+            Bool.self, forKey: .autoLearnStyle) ?? defaults.autoLearnStyle
+        refineInsertCount = try container.decodeIfPresent(
+            Int.self, forKey: .refineInsertCount) ?? defaults.refineInsertCount
     }
 
     public static let defaultRefinePrompt = """
@@ -85,13 +104,21 @@ public struct AppSettings: Codable, Sendable, Equatable {
                 modelOverride: String? = nil,
                 vocabulary: [VocabRule] = [],
                 hotkeysPaused: Bool = false,
-                duckWhileDictating: Bool = true) {
+                duckWhileDictating: Bool = true,
+                snippets: [SnippetRule] = [],
+                styleProfile: String = "",
+                autoLearnStyle: Bool = true,
+                refineInsertCount: Int = 0) {
         self.holdThreshold = holdThreshold
         self.refineSystemPrompt = refineSystemPrompt
         self.modelOverride = modelOverride
         self.vocabulary = vocabulary
         self.hotkeysPaused = hotkeysPaused
         self.duckWhileDictating = duckWhileDictating
+        self.snippets = snippets
+        self.styleProfile = styleProfile
+        self.autoLearnStyle = autoLearnStyle
+        self.refineInsertCount = refineInsertCount
     }
 
     // MARK: - Persistence

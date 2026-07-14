@@ -1,34 +1,53 @@
 import Foundation
 
 /// NDJSON messages exchanged with the Node sidecar (see sidecar/src/protocol.ts).
+/// A (raw dictation → final sent text) example used for style learning.
+public struct StylePair: Codable, Sendable, Equatable {
+    public let raw: String
+    public let final: String
+
+    public init(raw: String, final: String) {
+        self.raw = raw
+        self.final = final
+    }
+}
+
 public enum SidecarRequest: Equatable, Sendable {
     case ping(id: String)
     case refine(id: String, transcript: String, context: String, appName: String,
-                mode: RefineMode)
+                mode: RefineMode, styleHint: String)
     case revise(id: String, draft: String, instruction: String, context: String,
-                appName: String, mode: RefineMode)
+                appName: String, mode: RefineMode, styleHint: String)
+    case learn(id: String, pairs: [StylePair], currentProfile: String)
 
     public var id: String {
         switch self {
         case .ping(let id): id
-        case .refine(let id, _, _, _, _): id
-        case .revise(let id, _, _, _, _, _): id
+        case .refine(let id, _, _, _, _, _): id
+        case .revise(let id, _, _, _, _, _, _): id
+        case .learn(let id, _, _): id
         }
     }
 
     /// One NDJSON line, newline-terminated.
     public func encoded() throws -> Data {
-        var object: [String: String]
+        var object: [String: Any]
         switch self {
         case .ping(let id):
             object = ["id": id, "type": "ping"]
-        case .refine(let id, let transcript, let context, let appName, let mode):
+        case .refine(let id, let transcript, let context, let appName, let mode,
+                     let styleHint):
             object = ["id": id, "type": "refine", "transcript": transcript,
-                      "context": context, "appName": appName, "mode": mode.rawValue]
-        case .revise(let id, let draft, let instruction, let context, let appName, let mode):
+                      "context": context, "appName": appName, "mode": mode.rawValue,
+                      "styleHint": styleHint]
+        case .revise(let id, let draft, let instruction, let context, let appName,
+                     let mode, let styleHint):
             object = ["id": id, "type": "revise", "draft": draft,
                       "instruction": instruction, "context": context,
-                      "appName": appName, "mode": mode.rawValue]
+                      "appName": appName, "mode": mode.rawValue, "styleHint": styleHint]
+        case .learn(let id, let pairs, let currentProfile):
+            object = ["id": id, "type": "learn", "currentProfile": currentProfile,
+                      "pairs": pairs.map { ["raw": $0.raw, "final": $0.final] }]
         }
         var data = try JSONSerialization.data(withJSONObject: object)
         data.append(0x0A)

@@ -139,15 +139,20 @@ final class AppCoordinator: ObservableObject {
 
     // MARK: - Hotkey pipeline
 
+    /// Selected text grabbed at Fn+Shift-down (transform mode).
+    private var grabbedSelection = ""
+    private var selectionTask: Task<Void, Never>?
+
     private func handle(action: HotkeyAction) {
         switch action {
         case .start(let mode):
             beginCapture(mode: mode)
             review?.listening = true
-        case .upgradeToRefine:
+        case .upgrade(let mode):
             guard review == nil else { return }
-            barState = .recording(mode: .refine)
-            captureScreenContext()
+            barState = .recording(mode: mode)
+            if mode == .refine { captureScreenContext() }
+            if mode == .transform { grabSelection() }
         case .finish(let mode):
             review?.listening = false
             endCapture(mode: mode)
@@ -181,6 +186,9 @@ final class AppCoordinator: ObservableObject {
         if mode == .refine {
             captureScreenContext()
         }
+        if mode == .transform {
+            grabSelection()
+        }
 
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) {
             [weak self] _ in
@@ -196,6 +204,15 @@ final class AppCoordinator: ObservableObject {
         contextTask = Task.detached { [weak self] in
             let context = ScreenContext.capture()
             await MainActor.run { self?.currentContext = context }
+        }
+    }
+
+    private func grabSelection() {
+        grabbedSelection = ""
+        selectionTask?.cancel()
+        selectionTask = Task { [weak self] in
+            let selection = await SelectionGrabber.grab()
+            self?.grabbedSelection = selection
         }
     }
 
@@ -231,11 +248,45 @@ final class AppCoordinator: ObservableObject {
 
             switch mode {
             case .dictation:
-                await self.deliver(text: transcript, raw: raw, mode: .dictation,
+                // Deterministic pass: spoken commands + snippets, zero added latency.
+                let processor = TranscriptPostProcessor(snippets: self.settings.snippets)
+                guard let processed = processor.apply(transcript) else {
+                    self.barState = .idle  // fully scratched — deliver nothing
+                    return
+                }
+                await self.deliver(text: processed, raw: raw, mode: .dictation,
                                    appName: frontAppName, duration: duration)
             case .refine:
                 self.openReview(transcript: transcript, appName: frontAppName)
+            case .transform:
+                self.openTransform(instruction: transcript, appName: frontAppName)
             }
+        }
+    }
+
+    private func openTransform(instruction: String, appName: String) {
+        barState = .idle
+        let selection = grabbedSelection
+        guard !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            flashError("No text selected")
+            return
+        }
+        let session = ReviewSession(
+            rawTranscript: instruction,
+            context: "",
+            appName: appName,
+            mode: .message,
+            targetApp: targetApp,
+            isTransform: true)
+        session.rememberSelection(selection)
+        session.draft = selection
+        review = session
+        reviewWindow.show(session: session, coordinator: self)
+        let styleHint = settings.styleProfile
+        runReviewTurn(label: "Rewriting…") { [sidecar] in
+            try await sidecar.revise(
+                draft: selection, instruction: instruction, context: "",
+                appName: appName, mode: .message, styleHint: styleHint)
         }
     }
 
@@ -258,29 +309,45 @@ final class AppCoordinator: ObservableObject {
         session.draft = transcript
         review = session
         reviewWindow.show(session: session, coordinator: self)
+        let styleHint = settings.styleProfile
         runReviewTurn(label: "Drafting…") { [sidecar] in
             try await sidecar.refine(
                 transcript: session.rawTranscript, context: session.context,
-                appName: session.appName, mode: session.mode)
+                appName: session.appName, mode: session.mode, styleHint: styleHint)
         }
     }
 
     func reviseReview(instruction: String) {
         guard let session = review else { return }
         let draft = session.draft
+        let styleHint = settings.styleProfile
         runReviewTurn(label: "Revising…") { [sidecar] in
             try await sidecar.revise(
                 draft: draft, instruction: instruction, context: session.context,
-                appName: session.appName, mode: session.mode)
+                appName: session.appName, mode: session.mode, styleHint: styleHint)
         }
     }
 
     func regenerateReview() {
         guard let session = review else { return }
+        if session.isTransform {
+            let styleHint = settings.styleProfile
+            let selection = session.originalSelection ?? session.draft
+            let instruction = session.rawTranscript
+            let appName = session.appName
+            let mode = session.mode
+            runReviewTurn(label: "Rewriting…") { [sidecar] in
+                try await sidecar.revise(
+                    draft: selection, instruction: instruction, context: "",
+                    appName: appName, mode: mode, styleHint: styleHint)
+            }
+            return
+        }
+        let styleHint = settings.styleProfile
         runReviewTurn(label: "Redrafting…") { [sidecar] in
             try await sidecar.refine(
                 transcript: session.rawTranscript, context: session.context,
-                appName: session.appName, mode: session.mode)
+                appName: session.appName, mode: session.mode, styleHint: styleHint)
         }
     }
 
@@ -329,6 +396,34 @@ final class AppCoordinator: ObservableObject {
                                      durationSeconds: duration)
             try? self.history?.save(entry)
             self.historyRevision += 1
+            self.recordAcceptedRefine(isTransform: session.isTransform)
+        }
+    }
+
+    /// Adaptive style learning: every Nth accepted refine, update the style profile from
+    /// recent (raw → final) pairs in a background sidecar turn. Transforms are excluded —
+    /// their "raw" is an instruction, not the user's dictated voice.
+    private func recordAcceptedRefine(isTransform: Bool) {
+        guard !isTransform else { return }
+        settings.refineInsertCount += 1
+        try? settings.save()
+        guard settings.autoLearnStyle,
+              StyleLearner.shouldLearn(insertCount: settings.refineInsertCount),
+              let entries = history?.recent(limit: 30, search: nil) else { return }
+        let pairs = StyleLearner.pairs(from: entries)
+        guard !pairs.isEmpty else { return }
+        let currentProfile = settings.styleProfile
+        Task {
+            do {
+                let updated = try await self.sidecar.learn(
+                    pairs: pairs, currentProfile: currentProfile)
+                if !updated.isEmpty {
+                    self.settings.styleProfile = updated
+                    try? self.settings.save()
+                }
+            } catch {
+                self.logError("style learn failed (will retry at next interval): \(error)")
+            }
         }
     }
 

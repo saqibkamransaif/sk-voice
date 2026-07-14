@@ -23,12 +23,13 @@ describe('parseRequest', () => {
       context: 'John: are you close?',
       appName: 'Messages',
       mode: 'message',
+      styleHint: '',
     });
   });
 
   it('defaults missing context and appName to empty strings', () => {
     const parsed = parseRequest('{"id":"r2","type":"refine","transcript":"hi"}');
-    expect(parsed).toEqual({ id: 'r2', type: 'refine', transcript: 'hi', context: '', appName: '', mode: 'message' });
+    expect(parsed).toEqual({ id: 'r2', type: 'refine', transcript: 'hi', context: '', appName: '', mode: 'message', styleHint: '' });
   });
 
   it('rejects invalid JSON', () => {
@@ -79,6 +80,7 @@ describe('parseRequest revise', () => {
       context: 'ctx',
       appName: 'Mail',
       mode: 'message',
+      styleHint: '',
     });
   });
 
@@ -96,5 +98,28 @@ describe('parseRequest revise', () => {
       '{"id":"p1","type":"refine","transcript":"build me a parser","mode":"prompt"}',
     );
     expect(parsed).toMatchObject({ type: 'refine', mode: 'prompt' });
+  });
+});
+
+describe('parseRequest learn + styleHint', () => {
+  it('parses learn with pairs', () => {
+    const parsed = parseRequest(JSON.stringify({
+      id: 'l1', type: 'learn', currentProfile: 'p',
+      pairs: [{ raw: 'a', final: 'b' }],
+    }));
+    expect(parsed).toEqual({
+      id: 'l1', type: 'learn', currentProfile: 'p', pairs: [{ raw: 'a', final: 'b' }],
+    });
+  });
+
+  it('rejects learn without pairs', () => {
+    expect(parseRequest('{"id":"l2","type":"learn","pairs":[]}')).toEqual({
+      parseError: 'missing pairs',
+    });
+  });
+
+  it('defaults styleHint to empty string', () => {
+    const parsed = parseRequest('{"id":"r9","type":"refine","transcript":"hi"}');
+    expect(parsed).toMatchObject({ styleHint: '' });
   });
 });

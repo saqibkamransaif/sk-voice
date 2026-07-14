@@ -28,7 +28,7 @@ final class HotkeyStateMachineTests: XCTestCase {
 
     func testCtrlMidHoldUpgradesToRefine() {
         XCTAssertEqual(sm.handle(fn: true, ctrl: false, at: 0), .start(.dictation))
-        XCTAssertEqual(sm.handle(fn: true, ctrl: true, at: 0.2), .upgradeToRefine)
+        XCTAssertEqual(sm.handle(fn: true, ctrl: true, at: 0.2), .upgrade(.refine))
         XCTAssertEqual(sm.handle(fn: false, ctrl: true, at: 0.8), .finish(.refine))
     }
 
@@ -48,7 +48,7 @@ final class HotkeyStateMachineTests: XCTestCase {
 
     func testCtrlUpgradeEmittedOnlyOnce() {
         XCTAssertEqual(sm.handle(fn: true, ctrl: false, at: 0), .start(.dictation))
-        XCTAssertEqual(sm.handle(fn: true, ctrl: true, at: 0.1), .upgradeToRefine)
+        XCTAssertEqual(sm.handle(fn: true, ctrl: true, at: 0.1), .upgrade(.refine))
         XCTAssertNil(sm.handle(fn: true, ctrl: false, at: 0.2))
         XCTAssertNil(sm.handle(fn: true, ctrl: true, at: 0.3))
         XCTAssertEqual(sm.handle(fn: false, ctrl: false, at: 0.6), .finish(.refine))
@@ -68,5 +68,42 @@ final class HotkeyStateMachineTests: XCTestCase {
     func testExactThresholdCountsAsFinish() {
         XCTAssertEqual(sm.handle(fn: true, ctrl: false, at: 0), .start(.dictation))
         XCTAssertEqual(sm.handle(fn: false, ctrl: false, at: 0.3), .finish(.dictation))
+    }
+}
+
+extension HotkeyStateMachineTests {
+    func testShiftAtDownStartsTransform() {
+        XCTAssertEqual(sm.handle(fn: true, ctrl: false, shift: true, at: 0),
+                       .start(.transform))
+        XCTAssertEqual(sm.handle(fn: false, ctrl: false, shift: true, at: 0.6),
+                       .finish(.transform))
+    }
+
+    func testShiftMidHoldUpgradesToTransform() {
+        XCTAssertEqual(sm.handle(fn: true, ctrl: false, at: 0), .start(.dictation))
+        XCTAssertEqual(sm.handle(fn: true, ctrl: false, shift: true, at: 0.2),
+                       .upgrade(.transform))
+        XCTAssertEqual(sm.handle(fn: false, ctrl: false, at: 0.8), .finish(.transform))
+    }
+
+    func testCtrlOutranksShift() {
+        XCTAssertEqual(sm.handle(fn: true, ctrl: true, shift: true, at: 0), .start(.refine))
+        XCTAssertEqual(sm.handle(fn: false, ctrl: true, shift: true, at: 0.5),
+                       .finish(.refine))
+    }
+
+    func testCtrlUpgradesOverActiveTransform() {
+        XCTAssertEqual(sm.handle(fn: true, ctrl: false, shift: true, at: 0),
+                       .start(.transform))
+        XCTAssertEqual(sm.handle(fn: true, ctrl: true, shift: true, at: 0.2),
+                       .upgrade(.refine))
+        XCTAssertEqual(sm.handle(fn: false, ctrl: false, at: 0.7), .finish(.refine))
+    }
+
+    func testShiftDoesNotDowngradeRefine() {
+        XCTAssertEqual(sm.handle(fn: true, ctrl: true, at: 0), .start(.refine))
+        XCTAssertNil(sm.handle(fn: true, ctrl: false, shift: true, at: 0.3))
+        XCTAssertEqual(sm.handle(fn: false, ctrl: false, shift: true, at: 0.8),
+                       .finish(.refine))
     }
 }

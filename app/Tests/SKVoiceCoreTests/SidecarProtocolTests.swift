@@ -12,7 +12,7 @@ final class SidecarProtocolTests: XCTestCase {
     func testRefineEncodesAllFields() throws {
         let data = try SidecarRequest.refine(
             id: "r1", transcript: "hello", context: "ctx", appName: "Slack",
-            mode: .message).encoded()
+            mode: .message, styleHint: "").encoded()
         let object = try JSONSerialization.jsonObject(with: data.dropLast()) as? [String: String]
         XCTAssertEqual(object?["type"], "refine")
         XCTAssertEqual(object?["transcript"], "hello")
@@ -24,7 +24,7 @@ final class SidecarProtocolTests: XCTestCase {
     func testReviseEncodesAllFields() throws {
         let data = try SidecarRequest.revise(
             id: "v1", draft: "Hey John", instruction: "shorter", context: "",
-            appName: "Mail", mode: .prompt).encoded()
+            appName: "Mail", mode: .prompt, styleHint: "").encoded()
         let object = try JSONSerialization.jsonObject(with: data.dropLast()) as? [String: String]
         XCTAssertEqual(object?["type"], "revise")
         XCTAssertEqual(object?["draft"], "Hey John")
@@ -56,7 +56,8 @@ final class SidecarProtocolTests: XCTestCase {
     func testUnicodeSurvivesRoundTrip() throws {
         let text = "Héllo — “smart quotes” and émoji 🎤"
         let data = try SidecarRequest.refine(
-            id: "u1", transcript: text, context: "", appName: "", mode: .message).encoded()
+            id: "u1", transcript: text, context: "", appName: "", mode: .message,
+            styleHint: "").encoded()
         let object = try JSONSerialization.jsonObject(with: data.dropLast()) as? [String: String]
         XCTAssertEqual(object?["transcript"], text)
     }

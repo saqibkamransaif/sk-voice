@@ -79,10 +79,11 @@ public final class HotkeyMonitor: @unchecked Sendable {
         let flags = event.flags
         let fn = flags.contains(.maskSecondaryFn)
         let ctrl = flags.contains(.maskControl)
+        let shift = flags.contains(.maskShift)
         let time = ProcessInfo.processInfo.systemUptime
 
         let action = queue.sync {
-            stateMachine.handle(fn: fn, ctrl: ctrl, at: time)
+            stateMachine.handle(fn: fn, ctrl: ctrl, shift: shift, at: time)
         }
         if let action {
             onAction(action)

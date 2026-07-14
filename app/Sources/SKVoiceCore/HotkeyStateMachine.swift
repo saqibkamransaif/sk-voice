@@ -3,15 +3,16 @@ import Foundation
 /// Actions the hotkey pipeline must perform in response to modifier changes.
 public enum HotkeyAction: Equatable, Sendable {
     case start(CaptureMode)
-    /// Ctrl pressed while a dictation hold is active — mode becomes refine (sticky).
-    case upgradeToRefine
+    /// A modifier pressed mid-hold upgraded the mode (sticky). Ctrl→refine, Shift→transform.
+    case upgrade(CaptureMode)
     case finish(CaptureMode)
     /// Released before the hold threshold — discard the capture.
     case cancel
 }
 
-/// Pure state machine for hold-to-talk on Fn (dictation) / Fn+Ctrl (refine).
-/// Feed it every flags snapshot; it emits at most one action per transition.
+/// Pure state machine for hold-to-talk on Fn (dictation) / Fn+Ctrl (refine) /
+/// Fn+Shift (transform). Feed it every flags snapshot; at most one action per transition.
+/// Upgrades are sticky; Ctrl outranks Shift when both are held.
 public struct HotkeyStateMachine: Sendable {
     private let holdThreshold: TimeInterval
     private var fnDown = false
@@ -24,17 +25,22 @@ public struct HotkeyStateMachine: Sendable {
 
     public var isActive: Bool { fnDown }
 
-    public mutating func handle(fn: Bool, ctrl: Bool, at t: TimeInterval) -> HotkeyAction? {
+    public mutating func handle(fn: Bool, ctrl: Bool, shift: Bool = false,
+                                at t: TimeInterval) -> HotkeyAction? {
         if fn && !fnDown {
             fnDown = true
             pressStart = t
-            mode = ctrl ? .refine : .dictation
+            mode = ctrl ? .refine : (shift ? .transform : .dictation)
             return .start(mode)
         }
         if fn && fnDown {
-            if ctrl && mode == .dictation {
+            if ctrl && mode != .refine {
                 mode = .refine
-                return .upgradeToRefine
+                return .upgrade(.refine)
+            }
+            if shift && mode == .dictation {
+                mode = .transform
+                return .upgrade(.transform)
             }
             return nil
         }

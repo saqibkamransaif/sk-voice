@@ -212,17 +212,25 @@ public actor SidecarClient {
     // MARK: - Requests
 
     public func refine(transcript: String, context: String, appName: String,
-                       mode: RefineMode = .message) async throws -> String {
+                       mode: RefineMode = .message, styleHint: String = "") async throws -> String {
         try await roundTrip(.refine(
             id: UUID().uuidString, transcript: transcript, context: context,
-            appName: appName, mode: mode))
+            appName: appName, mode: mode, styleHint: styleHint))
     }
 
     public func revise(draft: String, instruction: String, context: String,
-                       appName: String, mode: RefineMode) async throws -> String {
+                       appName: String, mode: RefineMode,
+                       styleHint: String = "") async throws -> String {
         try await roundTrip(.revise(
             id: UUID().uuidString, draft: draft, instruction: instruction,
-            context: context, appName: appName, mode: mode))
+            context: context, appName: appName, mode: mode, styleHint: styleHint))
+    }
+
+    /// Updates the learned style profile from recent (raw → final) pairs.
+    /// Learning turns are slow-path: allow more time than interactive refines.
+    public func learn(pairs: [StylePair], currentProfile: String) async throws -> String {
+        try await roundTrip(.learn(
+            id: UUID().uuidString, pairs: pairs, currentProfile: currentProfile))
     }
 
     private func roundTrip(_ request: SidecarRequest) async throws -> String {

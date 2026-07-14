@@ -120,6 +120,8 @@ struct SettingsTab: View {
     @ObservedObject var coordinator: AppCoordinator
     @State private var newFind = ""
     @State private var newReplace = ""
+    @State private var newTrigger = ""
+    @State private var newTemplate = ""
 
     var body: some View {
         Form {
@@ -160,6 +162,59 @@ struct SettingsTab: View {
                             VocabRule(find: newFind, replace: newReplace))
                         newFind = ""
                         newReplace = ""
+                        coordinator.applySettingsChange()
+                    }
+                }
+            }
+
+            Section("Snippets — say the trigger, get the template") {
+                ForEach(coordinator.settings.snippets) { snippet in
+                    HStack(alignment: .top) {
+                        Text("“\(snippet.trigger)”").font(.callout)
+                        Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                        Text(snippet.template).font(.caption)
+                            .foregroundStyle(.secondary).lineLimit(3)
+                        Spacer()
+                        Button {
+                            coordinator.settings.snippets.removeAll { $0.id == snippet.id }
+                            coordinator.applySettingsChange()
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("spoken trigger (e.g. insert signature)", text: $newTrigger)
+                    TextField("template text (multi-line supported)",
+                              text: $newTemplate, axis: .vertical)
+                        .lineLimit(1...4)
+                    Button("Add snippet") {
+                        guard !newTrigger.isEmpty, !newTemplate.isEmpty else { return }
+                        coordinator.settings.snippets.append(
+                            SnippetRule(trigger: newTrigger, template: newTemplate))
+                        newTrigger = ""
+                        newTemplate = ""
+                        coordinator.applySettingsChange()
+                    }
+                }
+                Text("Also built in: say “new line”, “new paragraph”, or “scratch that” while dictating.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Your writing style (learned automatically)") {
+                Toggle("Keep learning from my accepted drafts",
+                       isOn: binding(\.autoLearnStyle))
+                if coordinator.settings.styleProfile.isEmpty {
+                    Text("No profile yet — it builds itself after every \(StyleLearner.interval) accepted refines.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    TextEditor(text: binding(\.styleProfile))
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(height: 90)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
+                    Button("Clear learned profile") {
+                        coordinator.settings.styleProfile = ""
                         coordinator.applySettingsChange()
                     }
                 }

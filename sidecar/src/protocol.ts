@@ -14,6 +14,7 @@ export interface RefineRequest {
   context: string;
   appName: string;
   mode: RefineMode;
+  styleHint: string;
 }
 
 export interface ReviseRequest {
@@ -24,9 +25,17 @@ export interface ReviseRequest {
   context: string;
   appName: string;
   mode: RefineMode;
+  styleHint: string;
 }
 
-export type SidecarRequest = PingRequest | RefineRequest | ReviseRequest;
+export interface LearnRequest {
+  id: string;
+  type: 'learn';
+  pairs: Array<{ raw: string; final: string }>;
+  currentProfile: string;
+}
+
+export type SidecarRequest = PingRequest | RefineRequest | ReviseRequest | LearnRequest;
 
 export type SidecarResponse =
   | { id: string; type: 'pong' }
@@ -66,6 +75,7 @@ export function parseRequest(line: string): SidecarRequest | { parseError: strin
       context: stringField(obj, 'context'),
       appName: stringField(obj, 'appName'),
       mode: modeField(obj),
+      styleHint: stringField(obj, 'styleHint'),
     };
   }
   if (obj.type === 'revise') {
@@ -83,7 +93,21 @@ export function parseRequest(line: string): SidecarRequest | { parseError: strin
       context: stringField(obj, 'context'),
       appName: stringField(obj, 'appName'),
       mode: modeField(obj),
+      styleHint: stringField(obj, 'styleHint'),
     };
+  }
+  if (obj.type === 'learn') {
+    if (!Array.isArray(obj.pairs) || obj.pairs.length === 0) {
+      return { parseError: 'missing pairs' };
+    }
+    const pairs = (obj.pairs as unknown[])
+      .filter((pair): pair is { raw: string; final: string } => {
+        const candidate = pair as Record<string, unknown>;
+        return typeof candidate?.raw === 'string' && typeof candidate?.final === 'string';
+      })
+      .map((pair) => ({ raw: pair.raw, final: pair.final }));
+    if (pairs.length === 0) return { parseError: 'missing pairs' };
+    return { id: obj.id, type: 'learn', pairs, currentProfile: stringField(obj, 'currentProfile') };
   }
   return { parseError: `unknown type ${String(obj.type)}` };
 }

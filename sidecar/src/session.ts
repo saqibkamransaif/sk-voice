@@ -1,5 +1,5 @@
 import { query, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { RefineRequest, ReviseRequest } from './protocol.js';
+import type { RefineRequest, ReviseRequest, LearnRequest } from './protocol.js';
 
 export interface SessionOptions {
   systemPrompt: string;
@@ -47,6 +47,10 @@ export class WarmSession {
     return this.enqueue(this.buildRevisePrompt(request));
   }
 
+  learn(request: LearnRequest): Promise<string> {
+    return this.enqueue(this.buildLearnPrompt(request));
+  }
+
   private enqueue(prompt: string): Promise<string> {
     const run = () => this.runTurn(prompt);
     const result = this.chain.then(run, run);
@@ -61,6 +65,9 @@ export class WarmSession {
     const shared = [
       'New independent request — ignore all previous turns entirely.',
       request.appName ? `Target app: ${request.appName}` : '',
+      request.styleHint
+        ? `The user's known writing style (match it):\n${request.styleHint}`
+        : '',
       request.context ? `On-screen context:\n${request.context}` : '',
       `Dictated intent:\n${request.transcript}`,
     ];
@@ -88,6 +95,9 @@ export class WarmSession {
     return [
       'New independent request — ignore all previous turns entirely.',
       request.appName ? `Target app: ${request.appName}` : '',
+      request.styleHint
+        ? `The user's known writing style (match it):\n${request.styleHint}`
+        : '',
       request.context ? `On-screen context:\n${request.context}` : '',
       `Current ${kind} draft:\n${request.draft}`,
       `Revision instruction:\n${request.instruction}`,
@@ -95,6 +105,23 @@ export class WarmSession {
     ]
       .filter(Boolean)
       .join('\n\n');
+  }
+
+  private buildLearnPrompt(request: LearnRequest): string {
+    const pairs = request.pairs
+      .map((pair, i) => `--- Pair ${i + 1} ---\nDictated: ${pair.raw}\nFinal sent: ${pair.final}`)
+      .join('\n');
+    return [
+      'New independent request — ignore all previous turns entirely.',
+      'You maintain a concise writing-style profile of the user, learned from how their',
+      'final sent text differs from their raw dictation. Below are recent pairs and the',
+      'current profile. Produce an UPDATED profile: max 150 words, imperative bullet',
+      'points covering tone, sentence length, greetings/sign-offs, punctuation habits,',
+      'preferred/avoided words, capitalization of names and products. Keep stable traits,',
+      'drop anything contradicted by the new evidence. Output ONLY the profile text.',
+      request.currentProfile ? `Current profile:\n${request.currentProfile}` : 'Current profile: (none yet)',
+      `Recent pairs:\n${pairs}`,
+    ].join('\n\n');
   }
 
   private async runTurn(prompt: string): Promise<string> {

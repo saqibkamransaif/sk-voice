@@ -73,8 +73,7 @@ struct FloatingBarView: View {
                     .frame(width: 6, height: 6)
                     .shadow(color: .white.opacity(0.25), radius: 2)
             case .recording(let mode):
-                WaveformView(level: coordinator.inputLevel,
-                             tint: mode == .refine ? .indigo : .teal)
+                WaveformView(level: coordinator.inputLevel, tint: Self.tint(for: mode))
             case .transcribing:
                 ProgressView()
                     .controlSize(.small)
@@ -105,9 +104,17 @@ struct FloatingBarView: View {
         return false
     }
 
+    static func tint(for mode: CaptureMode) -> Color {
+        switch mode {
+        case .dictation: .teal
+        case .refine: .indigo
+        case .transform: .purple
+        }
+    }
+
     private var strokeTint: Color {
         switch coordinator.barState {
-        case .recording(let mode): mode == .refine ? .indigo.opacity(0.6) : .teal.opacity(0.6)
+        case .recording(let mode): Self.tint(for: mode).opacity(0.6)
         case .refining: .indigo.opacity(0.5)
         case .transcribing: .teal.opacity(0.5)
         case .error: .red.opacity(0.6)

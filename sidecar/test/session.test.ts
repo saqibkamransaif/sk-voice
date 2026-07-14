@@ -9,6 +9,7 @@ const request: RefineRequest = {
   context: 'John: are you close?',
   appName: 'Messages',
   mode: 'message',
+  styleHint: '',
 };
 
 /**
@@ -152,6 +153,48 @@ describe('WarmSession modes and revise', () => {
     expect(text).toContain('REFINED<');
     expect(calls[0][0]).toContain('Current message draft:\nHey John, running late.');
     expect(calls[0][0]).toContain('Revision instruction:\nmake it shorter');
+    await session.close();
+  });
+});
+
+describe('WarmSession styleHint and learn', () => {
+  it('includes styleHint in refine framing', async () => {
+    const { queryFn, calls } = fakeQuery();
+    const session = new WarmSession({ systemPrompt: 'draft', queryFn: queryFn as any });
+
+    await session.refine({ ...request, id: 's1', styleHint: 'short sentences, no emoji' });
+    expect(calls[0][0]).toContain("The user's known writing style");
+    expect(calls[0][0]).toContain('short sentences, no emoji');
+    await session.close();
+  });
+
+  it('omits style section when hint empty', async () => {
+    const { queryFn, calls } = fakeQuery();
+    const session = new WarmSession({ systemPrompt: 'draft', queryFn: queryFn as any });
+
+    await session.refine({ ...request, id: 's2', styleHint: '' });
+    expect(calls[0][0]).not.toContain('known writing style');
+    await session.close();
+  });
+
+  it('learn builds a profile-update turn from pairs', async () => {
+    const { queryFn, calls } = fakeQuery();
+    const session = new WarmSession({ systemPrompt: 'draft', queryFn: queryFn as any });
+
+    const text = await session.learn({
+      id: 'l1',
+      type: 'learn',
+      pairs: [
+        { raw: 'tell him ok', final: 'Sounds good — go ahead!' },
+        { raw: 'thanks bye', final: 'Thanks! Cheers, Saqib' },
+      ],
+      currentProfile: 'uses dashes',
+    });
+    expect(text).toContain('REFINED<');
+    expect(calls[0][0]).toContain('UPDATED profile');
+    expect(calls[0][0]).toContain('Dictated: tell him ok');
+    expect(calls[0][0]).toContain('Final sent: Thanks! Cheers, Saqib');
+    expect(calls[0][0]).toContain('Current profile:\nuses dashes');
     await session.close();
   });
 });

@@ -10,6 +10,12 @@ subscription cost.
 - **Smart target detection**: dictating into Slack/Mail/Messages drafts a polished message;
   dictating into Claude Code, claude.ai, ChatGPT, or Cursor expands your intent into a
   structured prompt instead. The panel badge shows the detected mode and can be flipped.
+- **Hold Fn+Shift on selected text** → speak an instruction ("make this formal",
+  "translate to English") → review the rewrite → Enter replaces the selection.
+- **Voice commands & snippets**: "new line", "new paragraph", "scratch that", plus your
+  own trigger phrases ("insert signature" → full signature block). Zero added latency.
+- **Adaptive style**: the app learns how you write from your accepted drafts and applies
+  that style to every future draft. Editable in Settings.
 
 Both feel instant: on-device Apple SpeechTranscriber ASR (a 2-second utterance transcribes
 in ~0.16 s) and a pre-warmed Claude session (refines in ~1.5–2.5 s).
@@ -51,8 +57,8 @@ plus setting **"Press 🌐 key to" → "Do Nothing"** in Keyboard settings.
 ## Development
 
 ```bash
-cd app && swift test                # 50 unit/integration tests
-cd sidecar && npx vitest run        # 19 protocol/session tests
+cd app && swift test                # 83 unit/integration tests
+cd sidecar && npx vitest run        # 25 protocol/session tests
 cd app && swift run skvoice-check wav|mic|context|sidecar   # pipeline diagnostics
 ```
 

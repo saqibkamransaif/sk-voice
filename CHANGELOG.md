@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.3.0] — 2026-07-13
+
+### Added
+- **Voice Actions on selected text (hold Fn+Shift)**: select text anywhere, speak an
+  instruction ("make this formal", "translate to English", "summarize in two lines",
+  "fix the grammar") — the review panel opens with the rewritten text (purple "Rewrite"
+  badge) and Enter replaces the selection. Clipboard fully preserved.
+- **Dictation voice commands** (deterministic, zero latency): "new line",
+  "new paragraph", and "scratch that" (discards everything dictated before it).
+- **Voice snippets**: settings-defined trigger phrases expand into templates —
+  say "insert signature" or "insert calendly" mid-dictation. Multi-line templates.
+- **Adaptive style profile**: after every 10 accepted refines, a background Claude turn
+  studies your (raw dictation → final sent) pairs and maintains a ~150-word style memo
+  that shapes all future drafts. View/edit/clear it in Settings; toggle to freeze.
+
+### Changed
+- Hotkey monitor now tracks Shift; Ctrl outranks Shift when both held.
+- Refine/revise requests carry the learned style hint.
+
+### Verified
+- 83 Swift + 25 sidecar tests passing; live transform round-trip 2.0s; live learn turn
+  produced a correct profile from sample pairs.
+
 ## [1.2.0] — 2026-07-13
 
 ### Added

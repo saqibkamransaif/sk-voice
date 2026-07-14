@@ -16,14 +16,23 @@ final class ReviewSession: ObservableObject {
     let context: String
     let appName: String
     let targetApp: NSRunningApplication?
+    /// Transform mode: rawTranscript is the spoken instruction, applied to the selection.
+    let isTransform: Bool
+    private(set) var originalSelection: String?
 
     init(rawTranscript: String, context: String, appName: String,
-         mode: RefineMode, targetApp: NSRunningApplication?) {
+         mode: RefineMode, targetApp: NSRunningApplication?,
+         isTransform: Bool = false) {
         self.rawTranscript = rawTranscript
         self.context = context
         self.appName = appName
         self.mode = mode
         self.targetApp = targetApp
+        self.isTransform = isTransform
+    }
+
+    func rememberSelection(_ selection: String) {
+        originalSelection = selection
     }
 }
 
@@ -73,7 +82,10 @@ struct ReviewView: View {
     let coordinator: AppCoordinator
     @FocusState private var editorFocused: Bool
 
-    private var accent: Color { session.mode == .prompt ? .indigo : .teal }
+    private var accent: Color {
+        if session.isTransform { return .purple }
+        return session.mode == .prompt ? .indigo : .teal
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -99,10 +111,12 @@ struct ReviewView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Button {
-                coordinator.switchReviewMode()
+                if !session.isTransform { coordinator.switchReviewMode() }
             } label: {
-                Label(session.mode == .prompt ? "Prompt" : "Message",
-                      systemImage: session.mode == .prompt
+                Label(session.isTransform ? "Rewrite"
+                          : session.mode == .prompt ? "Prompt" : "Message",
+                      systemImage: session.isTransform ? "wand.and.stars"
+                          : session.mode == .prompt
                           ? "sparkles.rectangle.stack" : "bubble.left.and.bubble.right")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 9).padding(.vertical, 4)
