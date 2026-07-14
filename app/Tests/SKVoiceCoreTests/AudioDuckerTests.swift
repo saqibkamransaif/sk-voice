@@ -6,7 +6,6 @@ final class AudioDuckerTests: XCTestCase {
     /// Fake volume world: a mutable volume plus a call flag.
     final class FakeAudio: @unchecked Sendable {
         let volume = Mutex<Float?>(0.8)
-        let callActive = Mutex<Bool>(false)
         let setCalls = Mutex<[Float]>([])
 
         var backend: AudioDucker.Backend {
@@ -17,8 +16,7 @@ final class AudioDuckerTests: XCTestCase {
                     volume.withLock { $0 = newValue }
                     setCalls.withLock { $0.append(newValue) }
                     return true
-                },
-                callActive: { [self] in callActive.withLock { $0 } })
+                })
         }
     }
 
@@ -32,15 +30,15 @@ final class AudioDuckerTests: XCTestCase {
         XCTAssertEqual(audio.volume.withLock { $0 }, 0.8)
     }
 
-    func testDuckSkippedDuringCall() {
+    func testDuckAppliesEvenDuringCalls() {
+        // Explicit user preference: dictating mid-call ducks the other participants
+        // so only the user's voice is heard while recording.
         let audio = FakeAudio()
-        audio.callActive.withLock { $0 = true }
-        let ducker = AudioDucker(backend: audio.backend)
-
+        let ducker = AudioDucker(backend: audio.backend, duckLevel: 0.1)
         ducker.duck()
-        XCTAssertEqual(audio.volume.withLock { $0 }, 0.8, "volume must not change in a call")
-        ducker.restore() // must be a safe no-op
-        XCTAssertEqual(audio.setCalls.withLock { $0 }, [])
+        XCTAssertEqual(audio.volume.withLock { $0 }, 0.1)
+        ducker.restore()
+        XCTAssertEqual(audio.volume.withLock { $0 }, 0.8)
     }
 
     func testDuckSkippedWhenVolumeAlreadyLow() {

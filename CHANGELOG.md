@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.6.0] — 2026-07-14
+
+### Added
+- **Native Urdu speech recognition (Whisper)**: Urdu/Mixed mode now transcribes speech
+  natively with whisper.cpp (large-v3-turbo, Metal, on-device, ~1 s per utterance after a
+  pre-warmed model load), then Claude translates to polished English. Model (~574 MB) is
+  installed; Settings shows a download button on fresh machines. Falls back to the
+  English-recognizer path when the model is absent.
+- `skvoice-check whisper <wav> [lang]` diagnostic.
+
+### Changed
+- **Ducking now applies during calls too** (user request): while dictating mid-call, the
+  other participants drop to 10% so only your voice is heard while recording.
+
+### Build
+- Requires `brew install whisper-cpp pkgconf` (system-library SPM target via augmented
+  pkg-config; ggml backend plugins loaded at runtime; hardened runtime needs
+  disable-library-validation for Homebrew dylibs).
+
 ## [1.5.0] — 2026-07-14
 
 ### Added

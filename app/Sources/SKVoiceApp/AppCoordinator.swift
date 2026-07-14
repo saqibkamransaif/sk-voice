@@ -88,6 +88,14 @@ final class AppCoordinator: ObservableObject {
             AudioStore.cleanup(olderThanDays: 30)
         }
 
+        // Urdu mode: load the whisper context now (~11 s once) so the first dictation
+        // doesn't stall.
+        if usesWhisper && whisper == nil {
+            Task {
+                self.whisper = try? WhisperTranscriber()
+            }
+        }
+
         let prompt = settings.refineSystemPrompt
         let model = settings.modelOverride
         appliedSidecarConfig = (prompt, model)
@@ -167,8 +175,15 @@ final class AppCoordinator: ObservableObject {
     /// Selected text grabbed at Fn+Shift-down (transform mode).
     private var grabbedSelection = ""
     private var selectionTask: Task<Void, Never>?
-    /// Samples accumulated during the current capture (for audio saving).
+    /// Samples accumulated during the current capture (for audio saving + whisper).
     private let capturedSamples = SampleAccumulator()
+    /// Lazy-loaded whisper context for Urdu mode (kept warm across captures).
+    private var whisper: WhisperTranscriber?
+
+    /// True when captures should be transcribed by whisper (Urdu mode + model present).
+    private var usesWhisper: Bool {
+        settings.dictationLanguage == "urdu-mixed" && WhisperTranscriber.modelInstalled
+    }
 
     private func handle(action: HotkeyAction) {
         switch action {
@@ -200,17 +215,24 @@ final class AppCoordinator: ObservableObject {
             Task.detached { [ducker] in ducker.duck() }
         }
 
-        let transcriber = DictationTranscriber(locale: settings.asrLocale)
-        self.transcriber = transcriber
-
-        Task {
-            try? await transcriber.start()
-        }
         capturedSamples.reset()
         let sampleSink = capturedSamples
-        recorder.beginCapture { samples in
-            sampleSink.append(samples)
-            Task { await transcriber.feed(samples) }
+
+        if usesWhisper {
+            // Whisper path: accumulate only; batch transcription happens at release.
+            recorder.beginCapture { samples in
+                sampleSink.append(samples)
+            }
+        } else {
+            let transcriber = DictationTranscriber(locale: settings.asrLocale)
+            self.transcriber = transcriber
+            Task {
+                try? await transcriber.start()
+            }
+            recorder.beginCapture { samples in
+                sampleSink.append(samples)
+                Task { await transcriber.feed(samples) }
+            }
         }
 
         if mode == .refine {
@@ -250,6 +272,11 @@ final class AppCoordinator: ObservableObject {
         recorder.endCapture()
         Task.detached { [ducker] in ducker.restore() }
         stopLevelTimer()
+
+        if transcriber == nil && usesWhisper {
+            endCaptureWithWhisper(mode: mode)
+            return
+        }
         guard let transcriber else {
             barState = .idle
             return
@@ -292,6 +319,54 @@ final class AppCoordinator: ObservableObject {
                     await self.deliver(text: processed, raw: raw, mode: .dictation,
                                        appName: frontAppName, duration: duration)
                 }
+            case .refine:
+                self.openReview(transcript: transcript, appName: frontAppName)
+            case .transform:
+                self.openTransform(instruction: transcript, appName: frontAppName)
+            }
+        }
+    }
+
+    /// Whisper path (Urdu mode): batch-transcribe the capture natively, then feed the
+    /// same downstream pipeline (review for refine/transform, translate turn for
+    /// dictation).
+    private func endCaptureWithWhisper(mode: CaptureMode) {
+        let duration = Date().timeIntervalSince(captureStart)
+        barState = .transcribing
+        let samples = capturedSamples.snapshot()
+        let vocabulary = VocabularyProcessor(rules: settings.vocabulary)
+        let frontAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+
+        Task {
+            let raw: String
+            do {
+                if self.whisper == nil {
+                    self.whisper = try WhisperTranscriber()
+                }
+                let whisper = self.whisper!
+                raw = try await Task.detached(priority: .userInitiated) {
+                    try whisper.transcribe(samples: samples, language: "auto")
+                }.value
+            } catch {
+                self.logError("whisper failed: \(error)")
+                self.flashError("Urdu transcription failed")
+                return
+            }
+            guard !raw.isEmpty else {
+                self.flashError("Heard nothing")
+                return
+            }
+            let transcript = vocabulary.apply(raw)
+
+            if self.review != nil {
+                self.barState = .idle
+                self.reviseReview(instruction: transcript)
+                return
+            }
+            switch mode {
+            case .dictation:
+                await self.translateAndDeliver(text: transcript, raw: raw,
+                                               appName: frontAppName, duration: duration)
             case .refine:
                 self.openReview(transcript: transcript, appName: frontAppName)
             case .transform:

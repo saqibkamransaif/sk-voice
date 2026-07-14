@@ -49,7 +49,8 @@ cp -R "dist/SK Voice.app" /Applications/
 open "/Applications/SK Voice.app"
 ```
 
-Requirements: macOS 26+, Xcode toolchain, Node ≥18, Claude Code CLI logged in.
+Requirements: macOS 26+, Xcode toolchain, Node ≥18, Claude Code CLI logged in,
+`brew install whisper-cpp pkgconf` (native Urdu ASR for translation mode).
 
 First launch walks you through: Microphone, Accessibility, Input Monitoring permissions,
 plus setting **"Press 🌐 key to" → "Do Nothing"** in Keyboard settings.

@@ -63,6 +63,39 @@ struct HistoryTab: View {
     }
 }
 
+/// Urdu model status/download UI inside the language section.
+struct UrduModelSection: View {
+    @ObservedObject private var downloader = WhisperModelDownloader.shared
+    @State private var installed = WhisperTranscriber.modelInstalled
+
+    var body: some View {
+        if installed {
+            Label("Urdu speech model installed — dictation is transcribed natively, then translated to English by Claude.",
+                  systemImage: "checkmark.seal.fill")
+                .font(.caption).foregroundStyle(.green)
+        } else if downloader.downloading {
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: downloader.progress)
+                Text("Downloading Urdu speech model… \(Int(downloader.progress * 100))% of ~574 MB")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .onChange(of: downloader.progress) {
+                if downloader.progress >= 1 { installed = WhisperTranscriber.modelInstalled }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("For real Urdu understanding, download the on-device Whisper model (~574 MB, one time). Until then, Urdu is approximated through the English recognizer — expect poor accuracy on pure Urdu.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let error = downloader.errorText {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
+                Button("Download Urdu Model") { downloader.start() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+}
+
 /// Shared playback so starting one recording stops the previous.
 @MainActor
 final class AudioPlayback {
@@ -156,8 +189,7 @@ struct SettingsTab: View {
                     Text("Urdu / Mixed — translate to English").tag("urdu-mixed")
                 }
                 if coordinator.settings.dictationLanguage == "urdu-mixed" {
-                    Text("Speech is captured with the Indian-English model and reconstructed into polished English by Claude (~2 s). Apple's on-device recognizer has no Urdu model, so long pure-Urdu passages may be rough — mixed Urdu/English works best.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    UrduModelSection()
                 } else {
                     Toggle("Polish dictation through Claude before pasting",
                            isOn: binding(\.translateToEnglish))
@@ -285,7 +317,7 @@ struct SettingsTab: View {
                 Text("Each capture's audio is saved locally for playback in History (auto-deleted after 30 days).")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Duck other audio while dictating", isOn: binding(\.duckWhileDictating))
-                Text("Lowers system volume to 10% while you hold Fn and restores it after. Skipped automatically during active calls.")
+                Text("Lowers system volume to 10% while you hold Fn and restores it after — including other voices on a call, so only you are heard while recording.")
                     .font(.caption).foregroundStyle(.secondary)
                 LaunchAtLoginToggle()
             }

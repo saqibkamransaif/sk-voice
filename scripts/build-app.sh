@@ -19,6 +19,9 @@ npm run build >/dev/null
 
 echo "==> swift build -c $BUILD_CONFIG"
 cd "$APP_DIR"
+# whisper.cpp is a system-library SPM target resolved via pkg-config; the augmented .pc
+# adds the ggml formula's headers/libs (runtime deps: brew install whisper-cpp pkgconf).
+export PKG_CONFIG_PATH="$ROOT_DIR/scripts/pkgconfig:${PKG_CONFIG_PATH:-}"
 swift build -c "$BUILD_CONFIG" --product SKVoiceApp
 
 BIN="$(swift build -c "$BUILD_CONFIG" --show-bin-path)/SKVoiceApp"
@@ -57,8 +60,8 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>               <string>SK Voice</string>
     <key>CFBundleDisplayName</key>        <string>SK Voice</string>
     <key>CFBundleIdentifier</key>         <string>com.saqibkamran.skvoice</string>
-    <key>CFBundleVersion</key>            <string>1.5.0</string>
-    <key>CFBundleShortVersionString</key> <string>1.5.0</string>
+    <key>CFBundleVersion</key>            <string>1.6.0</string>
+    <key>CFBundleShortVersionString</key> <string>1.6.0</string>
     <key>CFBundleExecutable</key>         <string>SKVoice</string>
     <key>CFBundlePackageType</key>        <string>APPL</string>
     <key>CFBundleIconFile</key>           <string>AppIcon</string>
@@ -83,6 +86,7 @@ cat > "$ENTITLEMENTS" <<'ENT'
 <plist version="1.0">
 <dict>
     <key>com.apple.security.device.audio-input</key> <true/>
+    <key>com.apple.security.cs.disable-library-validation</key> <true/>
 </dict>
 </plist>
 ENT

@@ -84,6 +84,27 @@ case "mic":
         fail("\(error.localizedDescription)")
     }
 
+case "whisper":
+    guard args.count >= 3 else { fail("usage: skvoice-check whisper <wav> [lang]") }
+    guard WhisperTranscriber.modelInstalled else {
+        fail("model not installed at \(WhisperTranscriber.modelURL.path)")
+    }
+    let lang = args.count >= 4 ? args[3] : "auto"
+    do {
+        let samples = try loadSamples(url: URL(fileURLWithPath: args[2]))
+        print("loading model…")
+        let start = Date()
+        let whisper = try WhisperTranscriber()
+        let loaded = Date()
+        let text = try whisper.transcribe(samples: samples, language: lang)
+        let done = Date()
+        print("model load: \(String(format: "%.2f", loaded.timeIntervalSince(start))) s")
+        print("transcribe: \(String(format: "%.2f", done.timeIntervalSince(loaded))) s")
+        print("text [\(lang)]: \(text)")
+    } catch {
+        fail("\(error.localizedDescription)")
+    }
+
 case "locales":
     let supported = await SpeechTranscriber.supportedLocales
     print("supported transcription locales (\(supported.count)):")

@@ -3,27 +3,24 @@ import CoreAudio
 import AppKit
 
 /// Ducks system output volume while dictating and restores the exact prior level on
-/// release — like Siri ducking your music. Skipped when a call app is actively using the
-/// microphone, so dictating mid-meeting never silences the other participants.
+/// release — like Siri ducking your music. Applies during calls too (by explicit user
+/// preference): while dictating mid-call, the other participants drop to 10% so only
+/// your own voice reaches the mic cleanly.
 public final class AudioDucker: @unchecked Sendable {
-    /// Injectable volume/call backend so the duck/restore state machine is unit-testable.
+    /// Injectable volume backend so the duck/restore state machine is unit-testable.
     public struct Backend: Sendable {
         public var getVolume: @Sendable () -> Float?
         public var setVolume: @Sendable (Float) -> Bool
-        public var callActive: @Sendable () -> Bool
 
         public init(getVolume: @escaping @Sendable () -> Float?,
-                    setVolume: @escaping @Sendable (Float) -> Bool,
-                    callActive: @escaping @Sendable () -> Bool) {
+                    setVolume: @escaping @Sendable (Float) -> Bool) {
             self.getVolume = getVolume
             self.setVolume = setVolume
-            self.callActive = callActive
         }
 
         public static let system = Backend(
             getVolume: { SystemVolume.get() },
-            setVolume: { SystemVolume.set($0) },
-            callActive: { CallDetection.callAppIsUsingMic() })
+            setVolume: { SystemVolume.set($0) })
     }
 
     private let backend: Backend
@@ -36,13 +33,12 @@ public final class AudioDucker: @unchecked Sendable {
         self.duckLevel = duckLevel
     }
 
-    /// Lower the output volume for a capture. No-op when: already ducked, a call app is
-    /// live on the mic, the device has no volume control, or volume is already low.
+    /// Lower the output volume for a capture. No-op when: already ducked, the device
+    /// has no volume control, or volume is already low.
     public func duck() {
         lock.lock()
         defer { lock.unlock() }
         guard savedVolume == nil,
-              !backend.callActive(),
               let current = backend.getVolume(),
               current > duckLevel else { return }
         if backend.setVolume(duckLevel) {

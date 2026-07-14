@@ -1,0 +1,15 @@
+{
+  "originHash" : "82ab111441a9d13706c8611ae19ee143088c99ac762da17f63446c3e6ae6fb5b",
+  "pins" : [
+    {
+      "identity" : "whisper.cpp",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ggml-org/whisper.cpp.git",
+      "state" : {
+        "revision" : "8a9ad7844d6e2a10cddf4b92de4089d7ac2b14a9",
+        "version" : "1.7.4"
+      }
+    }
+  ],
+  "version" : 3
+}
