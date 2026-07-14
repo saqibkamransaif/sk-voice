@@ -80,8 +80,9 @@ final class AppCoordinator: ObservableObject {
             logError("prewarm failed: \(error)")
         }
 
+        let asrLocale = settings.asrLocale
         Task {
-            try? await DictationTranscriber.ensureModel()
+            try? await DictationTranscriber.ensureModel(locale: asrLocale)
         }
         Task.detached {
             AudioStore.cleanup(olderThanDays: 30)
@@ -121,10 +122,21 @@ final class AppCoordinator: ObservableObject {
     /// settings mutation (vocab/snippet/style edits must not drop the warm session).
     private var appliedSidecarConfig: (prompt: String, model: String?)?
 
+    private var appliedASRLocale: String?
+
     func applySettingsChange() {
         try? settings.save()
         monitor?.updateThreshold(settings.holdThreshold)
         monitor?.isPaused = settings.hotkeysPaused
+
+        // Language changed → make sure the on-device model is installed.
+        let locale = settings.asrLocale
+        if appliedASRLocale != locale.identifier {
+            appliedASRLocale = locale.identifier
+            Task {
+                try? await DictationTranscriber.ensureModel(locale: locale)
+            }
+        }
 
         let prompt = settings.refineSystemPrompt
         let model = settings.modelOverride
@@ -188,7 +200,7 @@ final class AppCoordinator: ObservableObject {
             Task.detached { [ducker] in ducker.duck() }
         }
 
-        let transcriber = DictationTranscriber()
+        let transcriber = DictationTranscriber(locale: settings.asrLocale)
         self.transcriber = transcriber
 
         Task {
@@ -272,13 +284,40 @@ final class AppCoordinator: ObservableObject {
                     self.barState = .idle  // fully scratched — deliver nothing
                     return
                 }
-                await self.deliver(text: processed, raw: raw, mode: .dictation,
-                                   appName: frontAppName, duration: duration)
+                if self.settings.translationActive {
+                    await self.translateAndDeliver(text: processed, raw: raw,
+                                                   appName: frontAppName,
+                                                   duration: duration)
+                } else {
+                    await self.deliver(text: processed, raw: raw, mode: .dictation,
+                                       appName: frontAppName, duration: duration)
+                }
             case .refine:
                 self.openReview(transcript: transcript, appName: frontAppName)
             case .transform:
                 self.openTransform(instruction: transcript, appName: frontAppName)
             }
+        }
+    }
+
+    /// Translation-mode dictation: reconstruct/translate through the warm session, then
+    /// paste. Falls back to the raw transcript so the user is never blocked.
+    private func translateAndDeliver(text: String, raw: String,
+                                     appName: String, duration: Double) async {
+        barState = .refining
+        do {
+            let english = try await sidecar.revise(
+                draft: text, instruction: AppSettings.translateInstruction,
+                context: "", appName: appName, mode: .message,
+                styleHint: settings.styleProfile)
+            await deliver(text: english, raw: raw, mode: .dictation,
+                          appName: appName, duration: duration)
+        } catch {
+            logError("translate failed, pasting raw transcript: \(error)")
+            notify(title: "Translation unavailable",
+                   body: "Pasted the raw transcript instead.")
+            await deliver(text: text, raw: raw, mode: .dictation,
+                          appName: appName, duration: duration)
         }
     }
 

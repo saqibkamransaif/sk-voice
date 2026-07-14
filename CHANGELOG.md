@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0] — 2026-07-14
+
+### Added
+- **Translation mode (Urdu / mixed → English)**: Settings → Dictation language →
+  "Urdu / Mixed". Speech is captured with the Indian-English on-device model (Apple has
+  no Urdu locale — verified via `skvoice-check locales`) and reconstructed into polished
+  English by Claude (~2 s), then pasted. Falls back to the raw transcript if Claude is
+  unreachable. Live-verified with mixed Urdu/English input.
+- English (India) selectable as a plain dictation locale (better South Asian accent
+  handling, no translation pass).
+- "Polish dictation through Claude" toggle for English dictation (cleanup pass).
+- `skvoice-check locales` diagnostic listing on-device ASR locales.
+
 ## [1.4.0] — 2026-07-14
 
 ### Added

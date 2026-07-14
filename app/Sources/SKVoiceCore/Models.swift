@@ -65,6 +65,32 @@ public struct AppSettings: Codable, Sendable, Equatable {
     public var refineInsertCount: Int
     /// Save each capture's audio locally (playback in History; 30-day retention).
     public var keepAudioRecordings: Bool
+    /// ASR locale/profile: "en-US", "en-IN", or "urdu-mixed" (en-IN acoustics + Claude
+    /// reconstruction — Apple's on-device ASR has no Urdu locale, see skvoice-check locales).
+    public var dictationLanguage: String
+    /// Route plain Fn dictation through Claude translation before pasting.
+    /// Implied on when dictationLanguage == "urdu-mixed".
+    public var translateToEnglish: Bool
+
+    /// The ASR locale to use for the selected dictation language.
+    public var asrLocale: Locale {
+        Locale(identifier: dictationLanguage == "urdu-mixed" ? "en-IN" : dictationLanguage)
+    }
+
+    /// Whether dictation output should pass through the translation turn.
+    public var translationActive: Bool {
+        translateToEnglish || dictationLanguage == "urdu-mixed"
+    }
+
+    /// Instruction for the sidecar's revise turn when translating dictation.
+    public static let translateInstruction = """
+    This text was dictated by a bilingual speaker, possibly in Urdu or mixed \
+    Urdu/English, and was captured by an ENGLISH speech recognizer — Urdu words may \
+    appear as rough phonetic English or mistranscriptions. Reconstruct what the speaker \
+    actually meant and output natural, polished ENGLISH only. Preserve names, numbers, \
+    and technical terms exactly. If the text is already fully English, just clean it up \
+    minimally. Output ONLY the final English text.
+    """
 
     /// Tolerant decoding: new fields fall back to defaults instead of failing the whole
     /// settings file (which would silently reset the user's vocabulary and prompt).
@@ -92,6 +118,10 @@ public struct AppSettings: Codable, Sendable, Equatable {
             Int.self, forKey: .refineInsertCount) ?? defaults.refineInsertCount
         keepAudioRecordings = try container.decodeIfPresent(
             Bool.self, forKey: .keepAudioRecordings) ?? defaults.keepAudioRecordings
+        dictationLanguage = try container.decodeIfPresent(
+            String.self, forKey: .dictationLanguage) ?? defaults.dictationLanguage
+        translateToEnglish = try container.decodeIfPresent(
+            Bool.self, forKey: .translateToEnglish) ?? defaults.translateToEnglish
     }
 
     public static let defaultRefinePrompt = """
@@ -113,7 +143,9 @@ public struct AppSettings: Codable, Sendable, Equatable {
                 styleProfile: String = "",
                 autoLearnStyle: Bool = true,
                 refineInsertCount: Int = 0,
-                keepAudioRecordings: Bool = true) {
+                keepAudioRecordings: Bool = true,
+                dictationLanguage: String = "en-US",
+                translateToEnglish: Bool = false) {
         self.holdThreshold = holdThreshold
         self.refineSystemPrompt = refineSystemPrompt
         self.modelOverride = modelOverride
@@ -125,6 +157,8 @@ public struct AppSettings: Codable, Sendable, Equatable {
         self.autoLearnStyle = autoLearnStyle
         self.refineInsertCount = refineInsertCount
         self.keepAudioRecordings = keepAudioRecordings
+        self.dictationLanguage = dictationLanguage
+        self.translateToEnglish = translateToEnglish
     }
 
     // MARK: - Persistence

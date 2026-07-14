@@ -149,6 +149,23 @@ struct SettingsTab: View {
 
     var body: some View {
         Form {
+            Section("Dictation language") {
+                Picker("Language", selection: binding(\.dictationLanguage)) {
+                    Text("English (US)").tag("en-US")
+                    Text("English (India)").tag("en-IN")
+                    Text("Urdu / Mixed — translate to English").tag("urdu-mixed")
+                }
+                if coordinator.settings.dictationLanguage == "urdu-mixed" {
+                    Text("Speech is captured with the Indian-English model and reconstructed into polished English by Claude (~2 s). Apple's on-device recognizer has no Urdu model, so long pure-Urdu passages may be rough — mixed Urdu/English works best.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Toggle("Polish dictation through Claude before pasting",
+                           isOn: binding(\.translateToEnglish))
+                    Text("Adds ~2 s per dictation; useful for cleaning up rough speech.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             Section("Hotkeys") {
                 Toggle("Pause hotkeys", isOn: binding(\.hotkeysPaused))
                 VStack(alignment: .leading) {

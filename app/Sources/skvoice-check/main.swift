@@ -1,4 +1,5 @@
 import Foundation
+import Speech
 import AVFoundation
 import AppKit
 import SKVoiceCore
@@ -81,6 +82,13 @@ case "mic":
         print("transcript: \(text)")
     } catch {
         fail("\(error.localizedDescription)")
+    }
+
+case "locales":
+    let supported = await SpeechTranscriber.supportedLocales
+    print("supported transcription locales (\(supported.count)):")
+    for locale in supported.sorted(by: { $0.identifier < $1.identifier }) {
+        print("  \(locale.identifier(.bcp47))")
     }
 
 case "duck":
