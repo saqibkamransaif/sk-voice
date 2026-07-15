@@ -3,3 +3,7 @@ logs/
 node_modules/
 .DS_Store
 dist/
+
+# Ralph context management
+.ralph/
+.ralphrc
