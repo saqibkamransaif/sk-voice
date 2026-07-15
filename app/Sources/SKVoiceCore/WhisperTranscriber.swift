@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import whisper
 
 /// From libggml (ggml-backend.h, not re-exported through whisper.h): loads the compute
@@ -17,6 +18,10 @@ public final class WhisperTranscriber: @unchecked Sendable {
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin")!
     /// ~574 MB
     public static let modelExpectedBytes: Int64 = 574_000_000
+    /// Pinned upstream digest (huggingface.co/ggerganov/whisper.cpp LFS oid) — downloads
+    /// failing this check are discarded.
+    public static let modelSHA256 =
+        "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"
 
     public static var modelURL: URL {
         AppSettings.supportDirectory
@@ -36,9 +41,12 @@ public final class WhisperTranscriber: @unchecked Sendable {
 
     /// ggml loads its compute backends (Metal, CPU) as plugins at runtime; point it at
     /// them before the first init. Bundled copy first, Homebrew install as fallback.
+    /// Backend plugins are loaded ONLY from fixed, trusted locations: the app bundle
+    /// (signed with the app) or the Homebrew install. Deliberately no environment-variable
+    /// override — an env-controlled dylib directory would be an arbitrary-code-execution
+    /// vector in a process holding Accessibility permissions.
     private static let configureBackends: Void = {
         let candidates: [String?] = [
-            ProcessInfo.processInfo.environment["GGML_BACKEND_PATH"],
             Bundle.main.resourceURL?.appendingPathComponent("ggml-backends").path,
             "/opt/homebrew/opt/ggml/libexec",
         ]
@@ -122,6 +130,17 @@ public final class WhisperModelDownloader: NSObject, ObservableObject {
     private var task: URLSessionDownloadTask?
     private var observation: NSKeyValueObservation?
 
+    /// Streaming SHA-256 so the 574 MB file never fully loads into memory.
+    nonisolated static func sha256(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 8 * 1024 * 1024), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
     public func start() {
         guard !downloading, !WhisperTranscriber.modelInstalled else { return }
         downloading = true
@@ -145,6 +164,13 @@ public final class WhisperModelDownloader: NSObject, ObservableObject {
                     return
                 }
                 do {
+                    // Integrity gate: reject anything that doesn't match the pinned digest.
+                    let digest = try Self.sha256(of: temporary)
+                    guard digest == WhisperTranscriber.modelSHA256 else {
+                        try? FileManager.default.removeItem(at: temporary)
+                        self.errorText = "Model failed integrity check — download discarded."
+                        return
+                    }
                     try? FileManager.default.removeItem(at: destination)
                     try FileManager.default.moveItem(at: temporary, to: destination)
                     self.progress = 1

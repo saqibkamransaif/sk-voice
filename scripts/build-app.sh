@@ -31,6 +31,40 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/sidecar"
 cp "$BIN" "$BUNDLE/Contents/MacOS/SKVoice"
 
+echo "==> Bundling whisper/ggml libraries (self-contained, re-signed — no library-validation exception)"
+FRAMEWORKS="$BUNDLE/Contents/Frameworks"
+BACKENDS="$BUNDLE/Contents/Resources/ggml-backends"
+mkdir -p "$FRAMEWORKS" "$BACKENDS"
+
+# Copy the linked dylibs (resolving symlinks) and the ggml backend plugins.
+cp -L /opt/homebrew/opt/whisper-cpp/lib/libwhisper.1.dylib "$FRAMEWORKS/"
+cp -L /opt/homebrew/opt/ggml/lib/libggml.0.dylib "$FRAMEWORKS/"
+cp -L /opt/homebrew/opt/ggml/lib/libggml-base.0.dylib "$FRAMEWORKS/"
+cp -L /opt/homebrew/opt/libomp/lib/libomp.dylib "$FRAMEWORKS/"
+cp -L /opt/homebrew/opt/ggml/libexec/*.so "$BACKENDS/"
+
+# Point the main binary at the bundled copies.
+MAIN="$BUNDLE/Contents/MacOS/SKVoice"
+install_name_tool -change /opt/homebrew/opt/whisper-cpp/lib/libwhisper.1.dylib @rpath/libwhisper.1.dylib \
+                  -change /opt/homebrew/opt/ggml/lib/libggml.0.dylib @rpath/libggml.0.dylib \
+                  -change /opt/homebrew/opt/ggml/lib/libggml-base.0.dylib @rpath/libggml-base.0.dylib \
+                  -add_rpath @executable_path/../Frameworks "$MAIN" 2>/dev/null || true
+
+# Normalize ids and inter-library references inside the bundle.
+for LIB in "$FRAMEWORKS"/*.dylib; do
+    install_name_tool -id "@rpath/$(basename "$LIB")" "$LIB" 2>/dev/null || true
+    for DEP in $(otool -L "$LIB" | awk '/\/opt\/homebrew/{print $1}'); do
+        install_name_tool -change "$DEP" "@rpath/$(basename "$DEP")" "$LIB" 2>/dev/null || true
+    done
+done
+# Backend plugins already use @rpath deps; give them an rpath to Contents/Frameworks.
+for SO in "$BACKENDS"/*.so; do
+    for DEP in $(otool -L "$SO" | awk '/\/opt\/homebrew/{print $1}'); do
+        install_name_tool -change "$DEP" "@rpath/$(basename "$DEP")" "$SO" 2>/dev/null || true
+    done
+    install_name_tool -add_rpath @loader_path/../../Frameworks "$SO" 2>/dev/null || true
+done
+
 echo "==> Bundling sidecar runtime"
 cp -R "$SIDECAR_DIR/dist" "$BUNDLE/Contents/Resources/sidecar/dist"
 # The SDK stays external to the esbuild bundle (bundling breaks its cli.js discovery),
@@ -86,17 +120,21 @@ cat > "$ENTITLEMENTS" <<'ENT'
 <plist version="1.0">
 <dict>
     <key>com.apple.security.device.audio-input</key> <true/>
-    <key>com.apple.security.cs.disable-library-validation</key> <true/>
 </dict>
 </plist>
 ENT
 
 IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/{print $2; exit}')"
+SIGN_ID="${IDENTITY:--}"
+[[ -n "${IDENTITY:-}" ]] && echo "    using identity: $IDENTITY" || echo "    ad-hoc signing"
+# Sign nested code first (inside-out), then the bundle. Everything carries the same
+# Team ID, so hardened-runtime library validation stays fully enabled.
+for NESTED in "$FRAMEWORKS"/*.dylib "$BACKENDS"/*.so; do
+    codesign --force --options runtime --sign "$SIGN_ID" "$NESTED"
+done
 if [[ -n "${IDENTITY:-}" ]]; then
-    echo "    using identity: $IDENTITY"
-    codesign --force --deep --options runtime --entitlements "$ENTITLEMENTS" --sign "$IDENTITY" "$BUNDLE"
+    codesign --force --deep --options runtime --entitlements "$ENTITLEMENTS" --sign "$SIGN_ID" "$BUNDLE"
 else
-    echo "    no Apple Development identity found — ad-hoc signing"
     codesign --force --deep --entitlements "$ENTITLEMENTS" --sign - "$BUNDLE"
 fi
 codesign --verify --deep "$BUNDLE" && echo "    signature OK"
